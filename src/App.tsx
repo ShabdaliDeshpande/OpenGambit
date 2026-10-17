@@ -71,7 +71,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>Open Chess Board</h1>
+        <h1>OpenGambit</h1>
         <nav className="tabs" role="tablist" aria-label="Screens">
           {TABS.map(t => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => chooseTab(t)}>
