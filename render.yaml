@@ -1,0 +1,10 @@
+# Render Blueprint: one Docker web service (Render provides HTTPS and WebSockets).
+services:
+  - type: web
+    name: open-chess-board
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: TRUST_PROXY
+        value: "1"

@@ -1,0 +1,57 @@
+import { describe, expect, it } from 'vitest';
+import { readPgn } from '../analysis/pgn';
+import type { GameSnapshot } from './protocol';
+import { clockMs, fenAfter, onlinePgn, replay, withPending } from './view';
+
+const snapshot = (over: Partial<GameSnapshot> = {}): GameSnapshot => ({
+  id: 'g1',
+  tc: '3+2',
+  white: { id: 'a', name: 'Guest 1111', online: true },
+  black: { id: 'b', name: 'Guest 2222', online: true },
+  you: 'w',
+  moves: ['e2e4', 'e7e5'],
+  status: 'playing',
+  result: null,
+  clock: { w: 170_000, b: 175_000, running: 'w' },
+  firstMoveMs: null,
+  canAbort: false,
+  drawOffer: null,
+  canOfferDraw: true,
+  opponentGone: null,
+  spectators: 0,
+  ...over,
+});
+
+describe('online view helpers', () => {
+  it('runs only the active clock down from the snapshot, and stops at zero', () => {
+    const s = snapshot();
+    expect(clockMs(s, 1_000, 3_500, 'w')).toBe(167_500);
+    expect(clockMs(s, 1_000, 3_500, 'b')).toBe(175_000);
+    expect(clockMs(s, 0, 999_999, 'w')).toBe(0);
+    expect(clockMs(snapshot({ status: 'finished' }), 0, 5_000, 'w')).toBe(170_000);
+  });
+
+  it('replays UCI moves into SAN and positions, including promotion', () => {
+    const records = replay(['e2e4', 'e7e5', 'g1f3']);
+    expect(records.map(r => r.san)).toEqual(['e4', 'e5', 'Nf3']);
+    expect(fenAfter(records, 0)).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+    expect(fenAfter(records, 3)).toBe(records[2]!.fen);
+    const promo = replay(['h2h4', 'g7g5', 'h4g5', 'h7h6', 'g5h6', 'f8g7', 'h6g7', 'g8f6', 'g7h8q']);
+    expect(promo.at(-1)).toMatchObject({ san: 'gxh8=Q+', promotion: 'q' });
+  });
+
+  it('shows a sent move only while it still follows the server’s moves', () => {
+    expect(withPending(['e2e4'], { uci: 'e7e5', ply: 1 })).toEqual(['e2e4', 'e7e5']);
+    expect(withPending(['e2e4', 'c7c5'], { uci: 'e7e5', ply: 1 })).toEqual(['e2e4', 'c7c5']);
+    expect(withPending(['e2e4'], null)).toEqual(['e2e4']);
+  });
+
+  it('exports a PGN the analysis board can read', () => {
+    const pgn = onlinePgn(snapshot({ status: 'finished', result: { result: '0-1', winner: 'b', reason: 'resign' } }), new Date(2026, 9, 17));
+    expect(pgn).toContain('[White "Guest 1111"]');
+    expect(pgn).toContain('[TimeControl "180+2"]');
+    expect(pgn).toContain('[Result "0-1"]');
+    const tree = readPgn(pgn);
+    expect(tree.headers.Black).toBe('Guest 2222');
+  });
+});
