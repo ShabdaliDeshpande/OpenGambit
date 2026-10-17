@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { migrate, type Db } from './db/db.ts';
+import { MIGRATIONS, migrate, type Db } from './db/db.ts';
 import { toPositional } from './db/postgres.ts';
 import { openSqlite } from './db/sqlite.ts';
 import { SESSION_TTL_MS, Store, type GameRecord } from './store.ts';
@@ -40,7 +40,7 @@ function storeSuite(name: string, open: () => Promise<Db>) {
     it('applies migrations once', async () => {
       await migrate(db);
       const row = await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM schema_version');
-      expect(Number(row!.n)).toBe(1);
+      expect(Number(row!.n)).toBe(MIGRATIONS.length);
     });
 
     it('keeps usernames unique regardless of case', async () => {

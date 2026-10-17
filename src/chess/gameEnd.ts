@@ -12,7 +12,8 @@ export type EndReason =
   | 'agreement'
   | 'imported'
   | 'abandoned'
-  | 'abandoned-draw';
+  | 'abandoned-draw'
+  | 'no-start';
 
 export type ResultCode = '1-0' | '0-1' | '1/2-1/2';
 
@@ -75,6 +76,9 @@ export const agreementResult = (): GameResult => draw('agreement');
 export const abandonedResult = (winner: Color | null): GameResult =>
   winner ? win(winner, 'abandoned') : draw('abandoned-draw');
 
+/** Tournament games: a player who doesn't make their first move in time loses. */
+export const noStartResult = (late: Color): GameResult => win(late === 'w' ? 'b' : 'w', 'no-start');
+
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 
 export function describeResult(r: GameResult): string {
@@ -105,6 +109,8 @@ export function describeResult(r: GameResult): string {
       return `${loser} left the game. ${winner} wins.`;
     case 'abandoned-draw':
       return 'The opponent left the game. Draw.';
+    case 'no-start':
+      return `${loser} didn’t make a first move. ${winner} wins.`;
   }
 }
 
@@ -121,4 +127,5 @@ export const TERMINATION_LABEL: Record<EndReason, string> = {
   imported: 'Unknown',
   abandoned: 'Abandoned',
   'abandoned-draw': 'Abandoned',
+  'no-start': 'Abandoned',
 };

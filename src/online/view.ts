@@ -3,6 +3,14 @@ import type { Color, PieceSymbol, Square } from 'chess.js';
 import type { MoveRecord } from '../chess/game';
 import type { GameSnapshot } from './protocol';
 
+/** "0:45", "12:05" or "1:02:30" for a time left. */
+export function countdown(ms: number): string {
+  const total = Math.ceil(Math.max(0, ms) / 1000);
+  const [h, m, s] = [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 /** The clock as it should read now, counting down locally from the last snapshot. */
 export function clockMs(snap: GameSnapshot, receivedAt: number, now: number, color: Color): number {
   const at = snap.clock[color];

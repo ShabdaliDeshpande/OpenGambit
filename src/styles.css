@@ -1261,3 +1261,206 @@ p button.link-button {
 p button.link-button:hover {
   text-decoration: underline;
 }
+
+/* ---------- tournaments ---------- */
+
+.subnav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.subnav button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.tour-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tour-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+button.tour-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  width: 100%;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.tour-row:hover {
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+}
+
+.tour-row .muted {
+  grid-column: 2;
+}
+
+.tour-name {
+  font-weight: 600;
+}
+
+.tour-kind {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: #8a5cd1;
+  vertical-align: 2px;
+}
+
+.tour-kind.swiss {
+  background: #2f8a9c;
+}
+
+.tour-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rules h3 {
+  margin: 10px 0 4px;
+  font-size: 15px;
+}
+
+.rules ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.tournament {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  max-width: 960px;
+}
+
+.tour-head h2 {
+  margin: 4px 0;
+}
+
+.tour-head .back {
+  padding: 0;
+}
+
+.tour-clock {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
+.tour-clock.created {
+  color: var(--accent);
+}
+
+.standings {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.standings th,
+.standings td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.standings th {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.standings td.score {
+  font-weight: 700;
+  font-size: 17px;
+  text-align: right;
+}
+
+.standings tr.paused td {
+  opacity: 0.6;
+}
+
+.standings td.sheet {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.sheet-item {
+  display: inline-block;
+  min-width: 14px;
+  margin-right: 3px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.sheet-item.win {
+  color: #2e9d5b;
+}
+
+.sheet-item.loss {
+  color: var(--danger);
+}
+
+.sheet-item.fire {
+  color: #d9822b;
+}
+
+.sheet-item.bye {
+  color: var(--accent);
+}
+
+button.playing-link {
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+button.berserk {
+  border-color: #d9822b;
+  color: #d9822b;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .standings td.sheet {
+    display: none;
+  }
+  .standings th:nth-child(3) {
+    display: none;
+  }
+}

@@ -3,6 +3,7 @@ import type { Color, PieceSymbol } from 'chess.js';
 import { opposite, type TimeControl } from '../src/chess/clock.ts';
 import {
   abandonedResult,
+  noStartResult,
   agreementResult,
   detectBoardEnd,
   resignResult,
@@ -12,6 +13,14 @@ import {
 import type { DrawAction, GameSnapshot, GameStatus, ShownRating } from '../src/online/protocol.ts';
 import type { ServerConfig } from './config.ts';
 import type { Conn, Player } from './types.ts';
+
+export interface TournamentRules {
+  id: string;
+  name: string;
+  berserk: boolean;
+  /** No draw offers before this many plies (Swiss). */
+  drawMinPlies: number;
+}
 
 interface Seat {
   player: Player;
@@ -53,6 +62,10 @@ export class GameRoom {
   /** Ratings shown next to the names (taken when the game started), and the change once scored. */
   readonly ratings: Record<Color, ShownRating | null>;
   readonly diffs: Record<Color, number | null> = { w: null, b: null };
+  /** Set for tournament games: no abort, a missed first move loses, optional berserk. */
+  readonly tournament: TournamentRules | null;
+  readonly berserked: Record<Color, boolean> = { w: false, b: false };
+  private readonly increment: Record<Color, number>;
   private readonly cfg: ServerConfig;
   private readonly onChange: (room: GameRoom) => void;
 
@@ -63,7 +76,7 @@ export class GameRoom {
     black: Player,
     cfg: ServerConfig,
     onChange: (room: GameRoom) => void,
-    options: { rated?: boolean; ratings?: Record<Color, ShownRating | null> } = {},
+    options: { rated?: boolean; ratings?: Record<Color, ShownRating | null>; tournament?: TournamentRules } = {},
   ) {
     this.id = id;
     this.tc = tc;
@@ -71,6 +84,8 @@ export class GameRoom {
     this.onChange = onChange;
     this.rated = options.rated ?? false;
     this.ratings = options.ratings ?? { w: null, b: null };
+    this.tournament = options.tournament ?? null;
+    this.increment = { w: tc.incrementMs, b: tc.incrementMs };
     this.createdAt = cfg.now();
     const seat = (player: Player): Seat => ({
       player,
@@ -94,8 +109,14 @@ export class GameRoom {
     return this.status === 'playing' && this.plies >= 2;
   }
 
-  get abortable(): boolean {
+  /** Before both sides have made their first move. */
+  get opening(): boolean {
     return this.status === 'playing' && this.plies < 2;
+  }
+
+  /** Casual and rated games can be aborted in the opening; tournament games can't. */
+  get abortable(): boolean {
+    return this.opening && !this.tournament;
   }
 
   player(color: Color): Player {
@@ -174,7 +195,7 @@ export class GameRoom {
         this.end(timeoutResult(this.chess, color));
         return 'Your time ran out.';
       }
-      this.remaining[color] = left + this.tc.incrementMs;
+      this.remaining[color] = left + this.increment[color];
     }
 
     this.chess.move({ from: legal.from, to: legal.to, ...(legal.promotion ? { promotion: legal.promotion as PieceSymbol } : {}) });
@@ -193,6 +214,17 @@ export class GameRoom {
       if (this.plies === 2) for (const c of ['w', 'b'] as const) if (this.seats[c].offlineSince !== null) this.armGone(c);
       this.broadcast();
     }
+    return null;
+  }
+
+  /** Tournament option: halve your own clock and drop the increment, for an extra point on a win. */
+  berserk(conn: Conn): string | null {
+    const color = this.colorOf(conn.player);
+    if (!color || !this.canBerserk(color)) return 'You can’t berserk now.';
+    this.berserked[color] = true;
+    this.remaining[color] = Math.floor(this.tc.initialMs / 2);
+    this.increment[color] = 0;
+    this.broadcast();
     return null;
   }
 
@@ -264,8 +296,11 @@ export class GameRoom {
       status: this.status,
       result: this.result,
       clock: { w: this.remainingMs('w', now), b: this.remainingMs('b', now), running: this.clockRunning ? this.chess.turn() : null },
-      firstMoveMs: this.abortable ? Math.max(0, this.turnStart + this.cfg.firstMoveMs(this.tc) - now) : null,
+      firstMoveMs: this.opening ? Math.max(0, this.turnStart + this.cfg.firstMoveMs(this.tc) - now) : null,
       canAbort: this.abortable,
+      tournament: this.tournament ? { id: this.tournament.id, name: this.tournament.name } : null,
+      berserk: { ...this.berserked },
+      canBerserk: you !== null && this.canBerserk(you),
       drawOffer: this.drawOffer,
       canOfferDraw: you !== null && this.canOfferDraw(you),
       opponentGone: you ? this.goneFor(opposite(you), now) : null,
@@ -283,10 +318,17 @@ export class GameRoom {
     this.timers.clear();
   }
 
+  private canBerserk(color: Color): boolean {
+    // only before your own first move
+    const ownMoves = color === 'w' ? Math.ceil(this.plies / 2) : Math.floor(this.plies / 2);
+    return !!this.tournament?.berserk && this.status === 'playing' && ownMoves === 0 && !this.berserked[color];
+  }
+
   private canOfferDraw(color: Color): boolean {
     return (
       this.status === 'playing' &&
-      !this.abortable &&
+      !this.opening &&
+      this.plies >= (this.tournament?.drawMinPlies ?? 0) &&
       this.drawOffer === null &&
       this.plies - this.seats[color].lastDrawOfferPly >= this.cfg.drawOfferGapPlies
     );
@@ -299,7 +341,7 @@ export class GameRoom {
   /** Ms until the opponent of `color` can claim (0 = now), or null if `color` isn't away. */
   private goneFor(color: Color, now = this.cfg.now()): number | null {
     const since = this.seats[color].offlineSince;
-    if (since === null || this.status !== 'playing' || this.abortable) return null;
+    if (since === null || this.status !== 'playing' || this.opening) return null;
     return Math.max(0, since + this.goneTimeout(color) - now);
   }
 
@@ -320,7 +362,9 @@ export class GameRoom {
 
   private armFirstMove(): void {
     this.setTimer('first-move', this.cfg.firstMoveMs(this.tc), () => {
-      if (this.abortable) this.end(null);
+      if (!this.opening) return;
+      // in a tournament the player who didn't move loses; otherwise the game is called off
+      this.end(this.tournament ? noStartResult(this.chess.turn()) : null);
     });
   }
 

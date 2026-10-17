@@ -123,6 +123,27 @@ The server keeps everything in memory, in one Node process: [server/hub.ts](serv
 
 **Database.** If `DATABASE_URL` is set to a PostgreSQL connection string, the server uses it. Otherwise it uses a SQLite file at `data/chess.db` (change it with `SQLITE_PATH`) through Node's built-in `node:sqlite`. The server creates and upgrades the tables by itself on start.
 
+## Features (Phase 6: Tournaments)
+
+Open **Play online → 🏆 Tournaments**. Signed-in players can create a tournament: pick Arena or Swiss, an optional name, a time control, when it starts (1–60 minutes from now) and whether it's rated. Anyone signed in can join. Guests can watch.
+
+| | Arena | Swiss |
+|---|---|---|
+| Length | A fixed duration (10 minutes to 2 hours). | A fixed number of rounds (3–15), with a pause between rounds (10 s to 5 min). |
+| Pairing | As soon as your game ends you're paired again with someone close to you in the standings and rating, never the opponent you just played. The first wave is paired by rating. | Each round pairs players with similar scores who haven't met yet, top half against bottom half within a score group, balancing colours. Nobody gets the same colour three times in a row. |
+| Points | Win 2, draw 1, loss 0. After two wins in a row you're on fire 🔥: wins count 4 and draws 2. Draws under 10 moves score nothing, and so does a short draw that follows another draw. | Win 1, draw ½, loss 0. The odd player out gets a bye worth 1 (the lowest-ranked player who hasn't had one). |
+| Extras | Berserk (optional, ⚡): before your first move you can halve your clock and give up the increment; a win of at least 7 moves then earns 1 extra point. | No draw offers before move 30. Late joining is open until more than half the rounds have started; missed rounds count as 0. |
+| Ties | Performance rating, then who joined first. | Sonneborn–Berger, then Buchholz, then rating. |
+| End | When time is up. Games still running don't count. | After the last round, or earlier when no new pairing is possible. |
+
+In both formats:
+- **No-shows:** tournament games can't be aborted. If you don't make your first move in time (20–30 s), you lose that game and are paused.
+- **Leaving and pausing:** **Leave** before the start takes you out. **Pause** later keeps your score, and **Rejoin** brings you back.
+- **The live page:** it shows a countdown, standings with each player's results, and the games being played, each of which you can watch. When the next pairing comes, your own game opens by itself.
+- **After the end:** finished tournaments are saved with their final standings, and **Recently finished** lists them. Rated tournaments update ratings like any rated game.
+
+The pairing engine is in [server/tournament/](server/tournament/). Both formats solve a minimum-cost matching ([matching.ts](server/tournament/matching.ts)): it's exact up to 18 waiting players and uses a greedy start with swap improvements above that.
+
 ## Deploying
 
 The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
@@ -163,7 +184,7 @@ src/
     protocol.ts   message types shared with the server
     client.ts     the WebSocket client (reconnects and re-subscribes by itself)
     view.ts       clock countdown, replaying moves, PGN export
-  components/online/  OnlineView, Lobby, OnlineGame
+  components/online/  OnlineView, Lobby, OnlineGame, Tournaments (list and create form), TournamentPage
   account/api.ts  calls to the account API
   components/account/  AccountDialog (sign in / create account), ProfileView
   App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
@@ -176,10 +197,13 @@ server/         the server (Node, run directly from TypeScript)
   auth.ts       password hashing, input checks, cookies, login rate limits
   store.ts      users, sessions, ratings and games on top of the database
   rating/glicko2.ts  the Glicko-2 rating system
+  tournament/   manager.ts (lifecycle, timers, live pages), arena.ts (scoring, pairing),
+                swiss.ts (pairing, byes, tie-breaks), matching.ts (minimum-cost matching)
   db/           one interface over SQLite (node:sqlite) and PostgreSQL (pg), plus migrations
   index.ts      standalone server for `npm start`
   config.ts     timeouts and limits
 scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a running server
+scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -229,7 +253,9 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 
 ## Known gaps
 
-- **Running online games live only in server memory.** Restarting the server ends them. Finished games with a signed-in player are saved in the database.
+- **Running online games and tournaments live only in server memory.** Restarting the server ends them. Finished games with a signed-in player, and finished tournaments, are saved in the database.
+- **Tournaments are basic.** There's no tournament chat (left out on purpose: it would need moderation), no team battles, no scheduled or recurring events, no private or password-protected tournaments, no editing after creation, and no notifications outside the open tab.
+- **The Swiss pairing is a simplified version of the Dutch system,** not the full FIDE rules. It does keep the main guarantees: no rematches, similar scores, colour balance and fair byes.
 - **Guests are per tab.** Opening a game link in a new tab as a guest makes you a spectator. Signed-in players are the same player in every tab.
 - **No chat, rematch, takebacks, premoves or extra time** in online games.
 - **Account features are minimal.** There's no password reset, email, password change, account deletion, leaderboard or rating-range filter for seeks.

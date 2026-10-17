@@ -33,6 +33,7 @@ export interface GameRecord {
   reason: string;
   startedAt: number;
   endedAt: number;
+  tournamentId?: string | null;
 }
 
 export interface StoredGame extends GameRecord {
@@ -76,6 +77,7 @@ interface GameRow {
   black_diff: number | null;
   started_at: number;
   ended_at: number;
+  tournament_id: string | null;
 }
 
 const toUser = (r: UserRow): User => ({ id: r.id, username: r.username, createdAt: Number(r.created_at) });
@@ -98,6 +100,56 @@ const toGame = (r: GameRow): StoredGame => ({
   blackDiff: r.black_diff,
   startedAt: Number(r.started_at),
   endedAt: Number(r.ended_at),
+  tournamentId: r.tournament_id ?? null,
+});
+
+export interface TournamentRecord {
+  id: string;
+  kind: 'arena' | 'swiss';
+  name: string;
+  tc: string;
+  rated: boolean;
+  createdBy: string | null;
+  createdByName: string;
+  settings: Record<string, unknown>;
+  startedAt: number;
+  finishedAt: number;
+  players: number;
+  winnerName: string | null;
+  /** Final standings as shown on the tournament page. */
+  standings: unknown[];
+}
+
+interface TournamentRow {
+  id: string;
+  kind: 'arena' | 'swiss';
+  name: string;
+  tc: string;
+  rated: number;
+  created_by: string | null;
+  created_by_name: string;
+  settings: string;
+  started_at: number;
+  finished_at: number;
+  players: number;
+  winner_name: string | null;
+  standings: string;
+}
+
+const toTournament = (r: TournamentRow): TournamentRecord => ({
+  id: r.id,
+  kind: r.kind,
+  name: r.name,
+  tc: r.tc,
+  rated: Number(r.rated) === 1,
+  createdBy: r.created_by,
+  createdByName: r.created_by_name,
+  settings: JSON.parse(r.settings) as Record<string, unknown>,
+  startedAt: Number(r.started_at),
+  finishedAt: Number(r.finished_at),
+  players: Number(r.players),
+  winnerName: r.winner_name,
+  standings: JSON.parse(r.standings) as unknown[],
 });
 
 /** Ratings as they stand now: deviation grown for the time since the last rated game. */
@@ -226,8 +278,8 @@ export class Store {
       const diff = (side: 'white' | 'black') => (change ? Math.round(change[side].after.rating) - Math.round(change[side].before.rating) : null);
       await tx.run(
         `INSERT INTO games (id, white_id, black_id, white_name, black_name, tc, category, rated, moves, result, reason,
-           white_rating, black_rating, white_diff, black_diff, started_at, ended_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           white_rating, black_rating, white_diff, black_diff, started_at, ended_at, tournament_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           game.id,
           game.whiteId,
@@ -246,6 +298,7 @@ export class Store {
           diff('black'),
           game.startedAt,
           game.endedAt,
+          game.tournamentId ?? null,
         ],
       );
       return change;
@@ -264,6 +317,46 @@ export class Store {
       [userId, userId, before, limit],
     );
     return rows.map(toGame);
+  }
+
+  async saveTournament(t: TournamentRecord): Promise<void> {
+    await this.db.run(
+      `INSERT INTO tournaments (id, kind, name, tc, rated, created_by, created_by_name, settings, started_at, finished_at, players, winner_name, standings)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        t.id,
+        t.kind,
+        t.name,
+        t.tc,
+        t.rated ? 1 : 0,
+        t.createdBy,
+        t.createdByName,
+        JSON.stringify(t.settings),
+        t.startedAt,
+        t.finishedAt,
+        t.players,
+        t.winnerName,
+        JSON.stringify(t.standings),
+      ],
+    );
+  }
+
+  async tournament(id: string): Promise<TournamentRecord | undefined> {
+    const row = await this.db.get<TournamentRow>('SELECT * FROM tournaments WHERE id = ?', [id]);
+    return row && toTournament(row);
+  }
+
+  /** Recently finished tournaments, newest first (without standings). */
+  async recentTournaments(limit = 20): Promise<Omit<TournamentRecord, 'standings'>[]> {
+    const rows = await this.db.all<TournamentRow>(
+      `SELECT id, kind, name, tc, rated, created_by, created_by_name, settings, started_at, finished_at, players, winner_name, '[]' AS standings
+       FROM tournaments ORDER BY finished_at DESC LIMIT ?`,
+      [limit],
+    );
+    return rows.map(r => {
+      const { standings: _, ...rest } = toTournament(r);
+      return rest;
+    });
   }
 
   async countGames(userId: string): Promise<number> {

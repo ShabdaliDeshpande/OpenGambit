@@ -38,6 +38,6 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Glicko-2 rating, deviation and volatility per time-control category.
 - Profiles and game history.
 
-## Phase 6: Tournaments
+## Phase 6: Tournaments (done)
 - Arena format (time-boxed, with berserk and streak bonuses) and Swiss format.
-- Pairing engine, live standings, and tournament chat (optional).
+- Pairing engine, live standings, and tournament chat (optional). **Decided:** our own minimum-cost matching for both formats, with a simplified Dutch-style Swiss. Tournaments need an account to create or join. Chat was left out (it needs moderation).

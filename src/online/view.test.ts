@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readPgn } from '../analysis/pgn';
 import type { GameSnapshot } from './protocol';
-import { clockMs, fenAfter, onlinePgn, replay, withPending } from './view';
+import { clockMs, countdown, fenAfter, onlinePgn, replay, withPending } from './view';
 
 const snapshot = (over: Partial<GameSnapshot> = {}): GameSnapshot => ({
   id: 'g1',
@@ -20,6 +20,9 @@ const snapshot = (over: Partial<GameSnapshot> = {}): GameSnapshot => ({
   canOfferDraw: true,
   opponentGone: null,
   spectators: 0,
+  tournament: null,
+  berserk: { w: false, b: false },
+  canBerserk: false,
   ...over,
 });
 
@@ -54,6 +57,14 @@ describe('online view helpers', () => {
     expect(pgn).toContain('[Result "0-1"]');
     const tree = readPgn(pgn);
     expect(tree.headers.Black).toBe('Guest 2222');
+  });
+
+  it('formats countdowns', () => {
+    expect(countdown(45_000)).toBe('0:45');
+    expect(countdown(44_001)).toBe('0:45');
+    expect(countdown(12 * 60_000 + 5_000)).toBe('12:05');
+    expect(countdown(3_750_000)).toBe('1:02:30');
+    expect(countdown(-5)).toBe('0:00');
   });
 
   it('puts ratings in the PGN of a rated game', () => {

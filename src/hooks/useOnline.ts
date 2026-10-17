@@ -1,7 +1,17 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { onlineClient, type OnlineClient, type OnlineState } from '../online/client';
 
-const IDLE: OnlineState = { status: 'connecting', me: null, lobby: null, games: {}, error: null, started: null };
+const IDLE: OnlineState = {
+  status: 'connecting',
+  me: null,
+  lobby: null,
+  games: {},
+  error: null,
+  started: null,
+  tours: null,
+  tourPages: {},
+  created: null,
+};
 const noSubscribe = () => () => undefined;
 const idle = () => IDLE;
 

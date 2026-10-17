@@ -21,9 +21,10 @@ interface Props {
   onBack: () => void;
   onAnalyse: (pgn: string) => void;
   onOpenProfile: (name: string) => void;
+  backLabel: string;
 }
 
-export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, onOpenProfile }: Props) {
+export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, onOpenProfile, backLabel }: Props) {
   const received = state.games[gameId];
   const snap = received?.snap;
   const [pending, setPending] = useState<{ uci: string; ply: number } | null>(null);
@@ -134,6 +135,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
           {s.rating && <span className="muted rating"> {ratingText(s.rating)}</span>}
           {s.diff !== null && <strong className={`diff ${s.diff >= 0 ? 'up' : 'down'}`}> {diffText(s.diff)}</strong>}
           {you === c && <span className="muted"> (you)</span>}
+          {snap.berserk[c] && <span title="Berserk: half the clock, an extra point for a win"> ⚡</span>}
         </span>
         <ClockDisplay ms={clockMs(snap, received.at, now, c)} running={playing && snap.clock.running === c} label={colorName(c)} />
       </div>
@@ -149,6 +151,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
       <aside className="side">
         <section className="panel game">
           <p className="muted game-meta">
+            {snap.tournament && <>🏆 {snap.tournament.name} · </>}
             {tc?.label ?? snap.tc} · {snap.rated ? 'Rated' : 'Casual'} · {you ? `playing ${colorName(you)}` : 'spectating'}
             {snap.spectators > 0 && ` · 👁 ${snap.spectators} watching`}
           </p>
@@ -206,10 +209,19 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
                     Decline
                   </button>
                 </div>
-              ) : snap.canAbort ? (
-                <button type="button" onClick={() => send({ t: 'abort', game: gameId })} title="Abort the game (allowed until both sides have moved)">
-                  ✕ Abort
-                </button>
+              ) : snap.canBerserk || snap.canAbort ? (
+                <>
+                  {snap.canBerserk && (
+                    <button type="button" className="berserk" onClick={() => send({ t: 'berserk', game: gameId })} title="Halve your clock for an extra point if you win">
+                      ⚡ Berserk
+                    </button>
+                  )}
+                  {snap.canAbort && (
+                    <button type="button" onClick={() => send({ t: 'abort', game: gameId })} title="Abort the game (allowed until both sides have moved)">
+                      ✕ Abort
+                    </button>
+                  )}
+                </>
               ) : confirmResign ? (
                 <div className="offer">
                   <span>Resign this game?</span>
@@ -249,7 +261,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
 
           <div className="row">
             <button type="button" onClick={onBack}>
-              ← Lobby
+              {backLabel}
             </button>
             {!playing && (
               <button type="button" className="analyse-game" onClick={() => onAnalyse(onlinePgn(snap))} disabled={snap.moves.length === 0}>

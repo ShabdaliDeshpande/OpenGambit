@@ -166,4 +166,28 @@ describe('account API', () => {
     expect((await get('/api/games/missing')).status).toBe(404);
     expect((await get('/api/games/..%2F..')).status).toBe(404);
   });
+
+  it('lists finished tournaments and shows one with its standings', async () => {
+    await store.saveTournament({
+      id: 'tour1',
+      kind: 'arena',
+      name: 'Night Arena',
+      tc: '3+2',
+      rated: true,
+      createdBy: null,
+      createdByName: 'someone',
+      settings: { durationMin: 30 },
+      startedAt: 1,
+      finishedAt: 2,
+      players: 2,
+      winnerName: 'Ada',
+      standings: [{ rank: 1, name: 'Ada', score: 4 }],
+    });
+    const list = (await (await get('/api/tournaments')).json()) as { tournaments: { id: string; winnerName: string; standings?: unknown }[] };
+    expect(list.tournaments).toMatchObject([{ id: 'tour1', winnerName: 'Ada' }]);
+    expect(list.tournaments[0]!.standings).toBeUndefined();
+    const one = (await (await get('/api/tournaments/tour1')).json()) as { tournament: { standings: unknown[]; settings: unknown } };
+    expect(one.tournament).toMatchObject({ standings: [{ rank: 1, name: 'Ada', score: 4 }], settings: { durationMin: 30 } });
+    expect((await get('/api/tournaments/nope')).status).toBe(404);
+  });
 });

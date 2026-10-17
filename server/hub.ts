@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import type { Color } from 'chess.js';
 import { findTimeControl, type TimeControl } from '../src/chess/clock.ts';
-import type { ClientMessage, LobbySnapshot, SeekColor, ServerMessage, ShownRating } from '../src/online/protocol.ts';
+import type { ClientMessage, CreateTour, LobbySnapshot, SeekColor, ServerMessage, ShownRating } from '../src/online/protocol.ts';
 import { speedOf, type ServerConfig } from './config.ts';
-import { GameRoom } from './room.ts';
+import { GameRoom, type TournamentRules } from './room.ts';
+import { TournamentManager, type TourLimits } from './tournament/manager.ts';
 import { currentGlicko, displayRating, type Store } from './store.ts';
 import type { Account, Conn, Player } from './types.ts';
 
@@ -62,7 +63,34 @@ function parseMessage(raw: string): ClientMessage | null {
     case 'leave':
     case 'resign':
     case 'abort':
+    case 'berserk':
       return game ? { t: o.t, game: o.game as string } : null;
+    case 'tours':
+      return typeof o.on === 'boolean' ? { t: 'tours', on: o.on } : null;
+    case 'watchTour':
+    case 'leaveTour':
+    case 'joinTour':
+    case 'withdrawTour':
+      return isString(o.id, 16) && GAME_ID.test(o.id) ? { t: o.t, id: o.id } : null;
+    case 'createTour': {
+      const t = o.tour as Record<string, unknown> | null;
+      if (!t || typeof t !== 'object') return null;
+      const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
+      return {
+        t: 'createTour',
+        tour: {
+          kind: t.kind as CreateTour['kind'],
+          name: isString(t.name, 60) ? t.name : '',
+          tc: isString(t.tc, 8) ? t.tc : '',
+          rated: t.rated === true,
+          startInMin: num(t.startInMin),
+          durationMin: num(t.durationMin),
+          berserk: t.berserk === true,
+          nbRounds: num(t.nbRounds),
+          roundIntervalSec: num(t.roundIntervalSec),
+        },
+      };
+    }
     case 'move':
       return game && isString(o.uci, 5) && Number.isInteger(o.ply)
         ? { t: 'move', game: o.game as string, uci: o.uci, ply: o.ply as number }
@@ -102,14 +130,28 @@ export class Hub {
   private readonly announced = new Set<string>();
   private readonly writes = new Set<Promise<void>>();
 
-  constructor(cfg: ServerConfig, store: Store | null = null) {
+  readonly tournaments: TournamentManager;
+
+  constructor(cfg: ServerConfig, store: Store | null = null, tourLimits: Partial<TourLimits> = {}) {
     this.cfg = cfg;
     this.store = store;
     this.pingTimer = setInterval(() => this.pingAll(), cfg.pingMs);
+    this.tournaments = new TournamentManager(
+      {
+        now: () => this.cfg.now(),
+        random: () => this.cfg.random(),
+        isOnline: userId => (this.accounts.get(userId)?.conns.size ?? 0) > 0,
+        liveAccount: userId => this.accounts.get(userId)?.account ?? null,
+        startGame: (tc, white, black, rated, rules) => this.startGame(tc, this.accountPlayer(white), this.accountPlayer(black), rated, rules),
+      },
+      store,
+      tourLimits,
+    );
   }
 
   stop(): void {
     clearInterval(this.pingTimer);
+    this.tournaments.stop();
     for (const t of this.cleanup) clearTimeout(t);
     for (const room of this.rooms.values()) room.dispose();
   }
@@ -121,6 +163,7 @@ export class Hub {
   /** Resolves once every finished game handed to the database has been saved. */
   async settled(): Promise<void> {
     while (this.writes.size) await Promise.all([...this.writes]);
+    await this.tournaments.settled();
   }
 
   connect(send: (msg: ServerMessage) => void, close: () => void, account: Account | null = null): Conn {
@@ -150,6 +193,7 @@ export class Hub {
     }
     for (const id of conn.rooms) this.rooms.get(id)?.leave(conn);
     for (const seek of this.seeks.values()) if (seek.conn === conn) this.seeks.delete(seek.id);
+    this.tournaments.dropConn(conn);
     this.broadcastLobby();
   }
 
@@ -198,6 +242,18 @@ export class Hub {
       case 'bye':
         for (const id of conn.rooms) this.rooms.get(id)?.bye(player);
         return;
+      case 'tours':
+        return this.tournaments.setListening(conn, msg.on);
+      case 'watchTour':
+        return this.tournaments.watch(conn, msg.id);
+      case 'leaveTour':
+        return this.tournaments.unwatch(conn, msg.id);
+      case 'createTour':
+        return this.report(conn, this.tournaments.create(conn, msg.tour));
+      case 'joinTour':
+        return this.report(conn, this.tournaments.join(conn, msg.id), msg.id);
+      case 'withdrawTour':
+        return this.report(conn, this.tournaments.withdraw(conn, msg.id), msg.id);
       default: {
         const room = this.rooms.get(msg.game);
         if (!room) return conn.send({ t: 'error', message: 'Game not found.', game: msg.game });
@@ -210,7 +266,9 @@ export class Hub {
                 ? room.abort(conn)
                 : msg.t === 'draw'
                   ? room.draw(conn, msg.action)
-                  : room.claim(conn, msg.outcome);
+                  : msg.t === 'berserk'
+                    ? room.berserk(conn)
+                    : room.claim(conn, msg.outcome);
         if (error) {
           conn.send({ t: 'error', message: error, game: room.id });
           // resync the sender's board after a rejected move
@@ -337,18 +395,30 @@ export class Hub {
     return displayRating(currentGlicko(player.account.ratings[speedOf(tc)], this.cfg.now()));
   }
 
-  private startGame(tc: TimeControl, white: Player, black: Player, rated: boolean): void {
+  /** The player for an account, created if they aren't connected right now (tournament pairings). */
+  private accountPlayer(account: Account): Player {
+    let player = this.accounts.get(account.user.id);
+    if (!player) {
+      player = { id: account.user.id, token: '', name: account.user.username, account, conns: new Set(), lastSeen: this.cfg.now() };
+      this.accounts.set(account.user.id, player);
+    }
+    return player;
+  }
+
+  private startGame(tc: TimeControl, white: Player, black: Player, rated: boolean, tournament?: TournamentRules): string {
     let id = randomId(8);
     while (this.rooms.has(id)) id = randomId(8);
     const room = new GameRoom(id, tc, white, black, this.cfg, r => this.roomChanged(r), {
       rated: rated && !!white.account && !!black.account,
       ratings: { w: this.shownRating(white, tc), b: this.shownRating(black, tc) },
+      ...(tournament ? { tournament } : {}),
     });
     this.rooms.set(id, room);
     // both players are now busy: their other seeks go away
     this.dropSeeks(s => s.owner === white || s.owner === black, false);
     for (const p of [white, black]) for (const c of p.conns) c.send({ t: 'started', game: id });
     this.broadcastLobby();
+    return id;
   }
 
   private roomChanged(room: GameRoom): void {
@@ -357,6 +427,7 @@ export class Hub {
     this.announced.add(room.id);
     this.broadcastLobby();
     if (room.status === 'finished') this.save(room);
+    if (room.tournament) this.tournaments.gameEnded(room);
     const timer = setTimeout(() => {
       this.cleanup.delete(timer);
       this.announced.delete(room.id);
@@ -386,6 +457,7 @@ export class Hub {
         result: room.result.result,
         reason: room.result.reason,
         startedAt: room.createdAt,
+        tournamentId: room.tournament?.id ?? null,
         endedAt: room.endedAt ?? this.cfg.now(),
       })
       .then(change => {
@@ -421,8 +493,8 @@ export class Hub {
     for (const conn of this.conns) if (conn.lobby) conn.send({ t: 'lobby', lobby });
   }
 
-  private report(conn: Conn, error: string | null): void {
-    if (error) conn.send({ t: 'error', message: error });
+  private report(conn: Conn, error: string | null, tour?: string): void {
+    if (error) conn.send({ t: 'error', message: error, ...(tour ? { tour } : {}) });
   }
 
   /** Token-bucket rate limit per connection. */

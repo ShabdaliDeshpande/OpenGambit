@@ -71,6 +71,11 @@ export interface GameSnapshot {
   /** Ms left to play the first move before the game is aborted, or null. */
   firstMoveMs: number | null;
   canAbort: boolean;
+  /** The tournament this game belongs to, if any. */
+  tournament: { id: string; name: string } | null;
+  /** Who went berserk (halved their clock) in this tournament game. */
+  berserk: { w: boolean; b: boolean };
+  canBerserk: boolean;
   drawOffer: Color | null;
   /** Whether the viewer may offer a draw now (rate limited). */
   canOfferDraw: boolean;
@@ -80,6 +85,96 @@ export interface GameSnapshot {
 }
 
 export type DrawAction = 'offer' | 'accept' | 'decline';
+
+export type TourKind = 'arena' | 'swiss';
+export type TourStatus = 'created' | 'started' | 'finished';
+
+/** A tournament in the list. Times are ms from when the message was sent. */
+export interface TourSummary {
+  id: string;
+  kind: TourKind;
+  name: string;
+  tc: string;
+  rated: boolean;
+  status: TourStatus;
+  cancelled: boolean;
+  createdBy: string;
+  players: number;
+  msToStart: number | null;
+  /** Arena: time left. */
+  msToEnd: number | null;
+  /** Swiss: rounds started so far, and the total. */
+  round: number | null;
+  nbRounds: number | null;
+  winner: string | null;
+}
+
+export interface ArenaSheetItem {
+  result: 'win' | 'draw' | 'loss' | 'void';
+  points: number;
+  fire: boolean;
+  berserk: boolean;
+}
+
+export interface SwissSheetItem {
+  round: number;
+  outcome: 'win' | 'draw' | 'loss' | 'bye' | 'absent';
+  opponent: string | null;
+  color: Color | null;
+}
+
+export interface TourStanding {
+  rank: number;
+  id: string;
+  name: string;
+  rating: number;
+  /** Arena points, or Swiss points (halves allowed). */
+  score: number;
+  /** Arena: on a winning streak (next win counts double). */
+  fire: boolean;
+  withdrawn: boolean;
+  /** The game they're playing now. */
+  playing: string | null;
+  /** Swiss: Sonneborn–Berger. Arena: performance rating. */
+  tieBreak: number | null;
+  arena?: ArenaSheetItem[];
+  swiss?: SwissSheetItem[];
+}
+
+export interface TourSnapshot extends TourSummary {
+  berserk: boolean;
+  streaks: boolean;
+  durationMin: number | null;
+  roundIntervalSec: number | null;
+  /** Swiss: ms until the next round starts, when waiting between rounds. */
+  msToNextRound: number | null;
+  standings: TourStanding[];
+  /** Games being played right now. */
+  games: { id: string; white: string; black: string }[];
+  you: { joined: boolean; withdrawn: boolean; playing: string | null } | null;
+  canJoin: boolean;
+}
+
+export interface CreateTour {
+  kind: TourKind;
+  name: string;
+  tc: string;
+  rated: boolean;
+  startInMin: number;
+  /** Arena only. */
+  durationMin: number;
+  berserk: boolean;
+  /** Swiss only. */
+  nbRounds: number;
+  roundIntervalSec: number;
+}
+
+export const TOUR_OPTIONS = {
+  startInMin: [1, 2, 5, 10, 15, 30, 60],
+  durationMin: [10, 20, 30, 45, 60, 90, 120],
+  nbRounds: [3, 4, 5, 6, 7, 8, 9, 11, 13, 15],
+  roundIntervalSec: [10, 30, 60, 120, 300],
+} as const;
 
 export type ClientMessage =
   | { t: 'hello'; token?: string }
@@ -95,7 +190,14 @@ export type ClientMessage =
   | { t: 'abort'; game: string }
   | { t: 'draw'; game: string; action: DrawAction }
   | { t: 'claim'; game: string; outcome: 'win' | 'draw' }
-  | { t: 'bye' };
+  | { t: 'berserk'; game: string }
+  | { t: 'bye' }
+  | { t: 'tours'; on: boolean }
+  | { t: 'watchTour'; id: string }
+  | { t: 'leaveTour'; id: string }
+  | { t: 'createTour'; tour: CreateTour }
+  | { t: 'joinTour'; id: string }
+  | { t: 'withdrawTour'; id: string };
 
 export type ServerMessage =
   /** `token` is set for guests (kept by the tab to reconnect); accounts are recognised by their session cookie. */
@@ -104,4 +206,7 @@ export type ServerMessage =
   | { t: 'lobby'; lobby: LobbySnapshot }
   | { t: 'started'; game: string }
   | { t: 'game'; game: GameSnapshot }
-  | { t: 'error'; message: string; game?: string };
+  | { t: 'error'; message: string; game?: string; tour?: string }
+  | { t: 'tours'; tours: TourSummary[] }
+  | { t: 'tour'; tour: TourSnapshot }
+  | { t: 'tourCreated'; id: string };

@@ -208,3 +208,22 @@ src/
 - **Categories:** ratings are kept per speed (bullet, blitz, rapid, classical), using the same speed categories as the lobby.
 
 **Not taken over:** lila's colour-advantage adjustment, its rating regulator, rankable-deviation leaderboards and its `recent` rating history.
+
+## 9. Tournaments (Phase 6)
+
+**Sources.** I read the local clone directly:
+- **Arena:** `modules/tournament/src/main/arena/ArenaSheet.scala` (scoring), `arena/PairingSystem.scala` and `arena/AntmaPairing.scala` (pairing), and `Pairing.scala` (the quick-draw and berserk thresholds).
+- **Swiss:** `modules/swiss/src/main/SwissSheet.scala` and `SwissPlayer.scala`.
+- **Player-facing rules:** the rules text in `translation/source/arena.xml` and `swiss.xml`.
+
+lila's Swiss pairing runs the external bbpPairings program, which isn't in the clone; this app uses its own simplified version instead.
+
+**Behaviour taken over (as rules, not code):**
+- **Arena points:** win 2, draw 1, loss 0. A player is "on fire" after two wins in a row: then a win scores 4 and a draw 2. A draw under 20 plies scores 0. A draw in a game under 60 plies scores 0 when the player's previous non-loss result was also a draw.
+- **Berserk:** halves the clock (and drops the increment). A win of at least 14 plies earns +1.
+- **Arena pairing:** the first wave is paired by rating. After that, a minimum-weight matching with cost = rank gap × rank factor (300 at the bottom, 2000 at the top) + rating gap. You never meet the opponent you just played, unless only two players are active, and two players who both had the same colour three times running aren't paired together.
+- **Arena end:** games in progress at the end don't count.
+- **All tournament games:** missing your first move forfeits the game.
+- **Swiss:** win 1, draw ½. A bye is worth 1, given when no pairing is found. No draws before move 30. Late join is open until more than half the rounds have started. Sonneborn–Berger breaks ties. The tournament ends early when every possible pairing has been played.
+
+**Not taken over:** team battles, scheduled and shield tournaments, entry conditions, forbidden or manual pairings, chat, the "absent after a missed game" rules beyond pausing the player, and the full FIDE Dutch pairing rules.

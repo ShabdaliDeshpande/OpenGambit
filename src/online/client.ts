@@ -1,4 +1,12 @@
-import { WS_PATH, type ClientMessage, type GameSnapshot, type LobbySnapshot, type ServerMessage } from './protocol';
+import {
+  WS_PATH,
+  type ClientMessage,
+  type GameSnapshot,
+  type LobbySnapshot,
+  type ServerMessage,
+  type TourSnapshot,
+  type TourSummary,
+} from './protocol';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
@@ -8,15 +16,25 @@ export interface ReceivedGame {
   at: number;
 }
 
+export interface ReceivedTour {
+  snap: TourSnapshot;
+  at: number;
+}
+
 export interface OnlineState {
   status: ConnectionStatus;
   me: { id: string; name: string; registered: boolean } | null;
   lobby: LobbySnapshot | null;
   games: Record<string, ReceivedGame>;
   /** Latest error from the server, with a counter so repeats still show. */
-  error: { message: string; game?: string; n: number } | null;
+  error: { message: string; game?: string; tour?: string; n: number } | null;
   /** A game that just started for this player (or is still running after a reconnect). */
   started: { game: string; n: number } | null;
+  /** Tournament list, with when it arrived (its times are relative). */
+  tours: { list: TourSummary[]; at: number } | null;
+  tourPages: Record<string, ReceivedTour>;
+  /** A tournament this player just created. */
+  created: { id: string; n: number } | null;
 }
 
 // Per tab (sessionStorage): each tab is its own guest, and a reload keeps the game.
@@ -45,7 +63,19 @@ function saveToken(token: string) {
  */
 export class OnlineClient {
   private ws: WebSocket | null = null;
-  private state: OnlineState = { status: 'connecting', me: null, lobby: null, games: {}, error: null, started: null };
+  private state: OnlineState = {
+    status: 'connecting',
+    me: null,
+    lobby: null,
+    games: {},
+    error: null,
+    started: null,
+    tours: null,
+    tourPages: {},
+    created: null,
+  };
+  private wantTours = false;
+  private readonly watchingTours = new Set<string>();
   private readonly listeners = new Set<() => void>();
   private wantLobby = false;
   private readonly watching = new Set<string>();
@@ -87,6 +117,22 @@ export class OnlineClient {
   unwatch(game: string) {
     if (!this.watching.delete(game)) return;
     this.send({ t: 'leave', game });
+  }
+
+  setTourList(on: boolean) {
+    this.wantTours = on;
+    this.send({ t: 'tours', on });
+  }
+
+  watchTour(id: string) {
+    if (this.watchingTours.has(id)) return;
+    this.watchingTours.add(id);
+    this.send({ t: 'watchTour', id });
+  }
+
+  unwatchTour(id: string) {
+    if (!this.watchingTours.delete(id)) return;
+    this.send({ t: 'leaveTour', id });
   }
 
   /** Opens a fresh connection, e.g. after signing in or out, so the server sees the new session. */
@@ -134,6 +180,17 @@ export class OnlineClient {
         this.set({ status: 'online', me: { id: msg.id, name: msg.name, registered: msg.registered } });
         if (this.wantLobby) this.send({ t: 'lobby', on: true });
         for (const game of this.watching) this.send({ t: 'watch', game });
+        if (this.wantTours) this.send({ t: 'tours', on: true });
+        for (const id of this.watchingTours) this.send({ t: 'watchTour', id });
+        return;
+      case 'tours':
+        this.set({ tours: { list: msg.tours, at: performance.now() } });
+        return;
+      case 'tour':
+        this.set({ tourPages: { ...this.state.tourPages, [msg.tour.id]: { snap: msg.tour, at: performance.now() } } });
+        return;
+      case 'tourCreated':
+        this.set({ created: { id: msg.id, n: ++this.counter } });
         return;
       case 'lobby':
         this.set({ lobby: msg.lobby });
@@ -145,7 +202,7 @@ export class OnlineClient {
         this.set({ games: { ...this.state.games, [msg.game.id]: { snap: msg.game, at: performance.now() } } });
         return;
       case 'error':
-        this.set({ error: { message: msg.message, ...(msg.game ? { game: msg.game } : {}), n: ++this.counter } });
+        this.set({ error: { message: msg.message, ...(msg.game ? { game: msg.game } : {}), ...(msg.tour ? { tour: msg.tour } : {}), n: ++this.counter } });
         return;
     }
   }

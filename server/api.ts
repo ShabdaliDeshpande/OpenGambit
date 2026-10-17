@@ -195,6 +195,15 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       });
     }
 
+    if (path === '/api/tournaments') return send(res, 200, { tournaments: await store.recentTournaments(30) });
+    const tour = /^\/api\/tournaments\/([^/]+)$/.exec(path);
+    if (tour) {
+      const id = tour[1]!;
+      const stored = GAME_ID.test(id) ? await store.tournament(id) : undefined;
+      if (!stored) throw new HttpError(404, 'No such tournament.');
+      return send(res, 200, { tournament: stored });
+    }
+
     const game = /^\/api\/games\/([^/]+)$/.exec(path);
     if (game) {
       const id = game[1]!;

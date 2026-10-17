@@ -68,6 +68,23 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX games_white ON games(white_id, ended_at);
   CREATE INDEX games_black ON games(black_id, ended_at);`,
+  `ALTER TABLE games ADD COLUMN tournament_id TEXT;
+  CREATE TABLE tournaments (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    tc TEXT NOT NULL,
+    rated INTEGER NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_by_name TEXT NOT NULL,
+    settings TEXT NOT NULL,
+    started_at BIGINT NOT NULL,
+    finished_at BIGINT NOT NULL,
+    players INTEGER NOT NULL,
+    winner_name TEXT,
+    standings TEXT NOT NULL
+  );
+  CREATE INDEX tournaments_finished ON tournaments(finished_at);`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */
