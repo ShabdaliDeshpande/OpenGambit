@@ -1,4 +1,4 @@
-# Open Chess Board
+# OpenGambit
 
 A browser chess app built with React and TypeScript. You can play two-player on one device, against a built-in computer opponent, or online against other people through a small Node server, with clocks, move navigation, and PGN/FEN import and export.
 
