@@ -38,15 +38,44 @@ export function withPending(moves: readonly string[], pending: { uci: string; pl
 
 /** A PGN of the online game, for the analysis board. */
 export function onlinePgn(snap: GameSnapshot, date: Date = new Date()): string {
+  return gamePgn({
+    moves: snap.moves,
+    white: snap.white.name,
+    black: snap.black.name,
+    tc: snap.tc,
+    result: snap.result?.result ?? '*',
+    rated: snap.rated,
+    whiteElo: snap.white.rating?.rating ?? null,
+    blackElo: snap.black.rating?.rating ?? null,
+    date,
+  });
+}
+
+export interface PgnInfo {
+  moves: readonly string[];
+  white: string;
+  black: string;
+  tc: string;
+  result: string;
+  rated: boolean;
+  whiteElo: number | null;
+  blackElo: number | null;
+  date: Date;
+}
+
+/** A PGN for a game played online, live or saved. */
+export function gamePgn(g: PgnInfo): string {
   const chess = new Chess();
-  for (const uci of snap.moves) chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), ...(uci[4] ? { promotion: uci[4] } : {}) });
+  for (const uci of g.moves) chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), ...(uci[4] ? { promotion: uci[4] } : {}) });
   const pad = (n: number) => String(n).padStart(2, '0');
-  chess.setHeader('Event', 'Online game');
-  chess.setHeader('Date', `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`);
-  chess.setHeader('White', snap.white.name);
-  chess.setHeader('Black', snap.black.name);
-  chess.setHeader('TimeControl', timeControlTag(snap.tc));
-  chess.setHeader('Result', snap.result?.result ?? '*');
+  chess.setHeader('Event', g.rated ? 'Rated online game' : 'Online game');
+  chess.setHeader('Date', `${g.date.getFullYear()}.${pad(g.date.getMonth() + 1)}.${pad(g.date.getDate())}`);
+  chess.setHeader('White', g.white);
+  chess.setHeader('Black', g.black);
+  if (g.whiteElo !== null) chess.setHeader('WhiteElo', String(g.whiteElo));
+  if (g.blackElo !== null) chess.setHeader('BlackElo', String(g.blackElo));
+  chess.setHeader('TimeControl', timeControlTag(g.tc));
+  chess.setHeader('Result', g.result);
   return chess.pgn();
 }
 

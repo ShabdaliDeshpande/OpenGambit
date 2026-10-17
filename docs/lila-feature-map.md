@@ -196,3 +196,15 @@ src/
 - **Draw offers.** The offer is stored with the ply it was made at, and the client allows a new offer only 20 plies after the previous one (`ctrl.ts`, `Drawer.offerDraw`).
 
 **Unknown:** the exact lag-compensation formula (lila-ws and scalachess `LagTracker`). This app uses its own simple model, described in the README.
+
+## 8. Ratings (Phase 5)
+
+**Sources.** I read `modules/rating/src/main/Glicko.scala` and `Perf.scala` in the local clone. The Glicko-2 calculation itself is in scalachess, which isn't in this clone, so it was written from Glickman's published description and checked against his worked example.
+
+**Behaviour taken over (as numbers and rules, not code):**
+- **Start and limits:** a new rating is 1500 with deviation 500 and volatility 0.09. Deviation is kept between 45 and 500, volatility at most 0.1, and ratings at 400 or more. One game moves a rating by at most 700 points.
+- **Growing uncertainty:** deviation grows over time without games, at 0.21436 rating periods per day ("a typical player's RD goes from 60 to 110 in 1 year").
+- **Provisional:** a rating is provisional while its deviation is 110 or more.
+- **Categories:** ratings are kept per speed (bullet, blitz, rapid, classical), using the same speed categories as the lobby.
+
+**Not taken over:** lila's colour-advantage adjustment, its rating regulator, rankable-deviation leaderboards and its `recent` rating history.

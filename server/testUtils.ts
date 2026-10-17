@@ -1,7 +1,8 @@
 import type { GameSnapshot, ServerMessage } from '../src/online/protocol.ts';
 import { makeConfig, type ServerConfig } from './config.ts';
 import { Hub } from './hub.ts';
-import type { Conn } from './types.ts';
+import type { Store } from './store.ts';
+import type { Account, Conn } from './types.ts';
 
 export interface TestClient {
   conn: Conn;
@@ -14,7 +15,7 @@ export interface TestClient {
 }
 
 /** A hub with fast timeouts and a fixed coin, driven by vitest fake timers. */
-export function testHub(overrides: Partial<ServerConfig> = {}) {
+export function testHub(overrides: Partial<ServerConfig> = {}, store: Store | null = null) {
   const cfg = makeConfig({
     random: () => 0.25,
     firstMoveMs: () => 20_000,
@@ -24,9 +25,9 @@ export function testHub(overrides: Partial<ServerConfig> = {}) {
     staleMs: Number.POSITIVE_INFINITY,
     ...overrides,
   });
-  const hub = new Hub(cfg);
+  const hub = new Hub(cfg, store);
 
-  const client = (): TestClient => {
+  const client = (account: Account | null = null): TestClient => {
     const inbox: ServerMessage[] = [];
     const c: TestClient = {
       conn: null as unknown as Conn,
@@ -46,13 +47,14 @@ export function testHub(overrides: Partial<ServerConfig> = {}) {
       () => {
         c.closed = true;
       },
+      account,
     );
     return c;
   };
 
-  /** Connects a client and says hello (optionally reusing a token). */
-  const join = (token?: string) => {
-    const c = client();
+  /** Connects a client and says hello (optionally reusing a token, or signed in). */
+  const join = (token?: string | null, account: Account | null = null) => {
+    const c = client(account);
     c.send({ t: 'hello', ...(token ? { token } : {}) });
     return c;
   };

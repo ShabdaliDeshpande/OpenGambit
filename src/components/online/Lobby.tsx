@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ratingText } from '../../account/api';
 import { findTimeControl, TIME_CONTROLS } from '../../chess/clock';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import type { SeekColor } from '../../online/protocol';
@@ -11,13 +12,20 @@ const tcLabel = (id: string) => findTimeControl(id)?.label ?? id;
 interface Props {
   client: OnlineClient | null;
   state: OnlineState;
+  /** Signed in according to the account API (the socket may still be reconnecting). */
+  signedIn: boolean;
+  onSignIn: () => void;
+  onOpenProfile: (name: string) => void;
   onWatch: (game: string) => void;
 }
 
-export function Lobby({ client, state, onWatch }: Props) {
+export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatch }: Props) {
   const [color, setColor] = useState<SeekColor>('random');
+  const [ratedChoice, setRatedChoice] = useState(true);
   const { me, lobby } = state;
   const ready = !!client && state.status === 'online';
+  const registered = !!me?.registered;
+  const rated = registered && ratedChoice;
   const seeks = lobby?.seeks ?? [];
   const mine = seeks.filter(s => s.owner === me?.id);
   const error = state.error && !state.error.game ? state.error : null;
@@ -38,14 +46,28 @@ export function Lobby({ client, state, onWatch }: Props) {
             </label>
           ))}
         </fieldset>
+        <fieldset className="color-choice">
+          <legend>Mode</legend>
+          <label>
+            <input type="radio" name="seek-mode" checked={rated} disabled={!registered} onChange={() => setRatedChoice(true)} />
+            <span>Rated</span>
+          </label>
+          <label>
+            <input type="radio" name="seek-mode" checked={!rated} onChange={() => setRatedChoice(false)} />
+            <span>Casual</span>
+          </label>
+        </fieldset>
+        {!signedIn && (
+          <p className="muted small">
+            <button type="button" className="link-button" onClick={onSignIn}>
+              Sign in
+            </button>{' '}
+            to play rated games. Guests play casual games.
+          </p>
+        )}
         <div className="tc-grid">
           {TIME_CONTROLS.map(tc => (
-            <button
-              key={tc.id}
-              type="button"
-              disabled={!ready}
-              onClick={() => client?.send({ t: 'seek', tc: tc.id, color })}
-            >
+            <button key={tc.id} type="button" disabled={!ready} onClick={() => client?.send({ t: 'seek', tc: tc.id, color, rated })}>
               <strong>{tc.id}</strong>
               <span>{tc.label.split(' ')[1]}</span>
             </button>
@@ -73,7 +95,10 @@ export function Lobby({ client, state, onWatch }: Props) {
               <tr>
                 <th scope="col">Player</th>
                 <th scope="col">Time</th>
-                <th scope="col">Colour</th>
+                <th scope="col">Mode</th>
+                <th scope="col">
+                  <span className="sr-only">Colour</span>
+                </th>
                 <th scope="col">
                   <span className="sr-only">Action</span>
                 </th>
@@ -82,20 +107,36 @@ export function Lobby({ client, state, onWatch }: Props) {
             <tbody>
               {seeks.map(s => {
                 const own = s.owner === me?.id;
+                const canJoin = !s.rated || registered;
                 return (
                   <tr key={s.id} className={own ? 'own' : ''}>
-                    <td>{own ? `${s.name} (you)` : s.name}</td>
-                    <td>{tcLabel(s.tc)}</td>
-                    <td title={COLOR_LABEL[s.color]}>
-                      {COLOR_ICON[s.color]} {COLOR_LABEL[s.color]}
+                    <td>
+                      {s.registered ? (
+                        <button type="button" className="link-button" onClick={() => onOpenProfile(s.name)}>
+                          {s.name}
+                        </button>
+                      ) : (
+                        s.name
+                      )}
+                      {s.rating && <span className="muted"> {ratingText(s.rating)}</span>}
+                      {own && <span className="muted"> (you)</span>}
                     </td>
+                    <td>{tcLabel(s.tc)}</td>
+                    <td>{s.rated ? 'Rated' : 'Casual'}</td>
+                    <td title={`Seeker plays ${COLOR_LABEL[s.color]}`}>{COLOR_ICON[s.color]}</td>
                     <td>
                       {own ? (
                         <button type="button" onClick={() => client?.send({ t: 'cancelSeek', id: s.id })}>
                           Cancel
                         </button>
                       ) : (
-                        <button type="button" className="primary" onClick={() => client?.send({ t: 'acceptSeek', id: s.id })}>
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={!canJoin}
+                          title={canJoin ? undefined : 'Sign in to play rated games'}
+                          onClick={() => client?.send({ t: 'acceptSeek', id: s.id })}
+                        >
                           Play
                         </button>
                       )}
@@ -115,7 +156,11 @@ export function Lobby({ client, state, onWatch }: Props) {
             {lobby.games.map(g => (
               <li key={g.id}>
                 <span>
-                  {g.white} – {g.black} <span className="muted">· {tcLabel(g.tc)}</span>
+                  {g.white} – {g.black}{' '}
+                  <span className="muted">
+                    · {tcLabel(g.tc)}
+                    {g.rated ? ' · Rated' : ''}
+                  </span>
                 </span>
                 <button type="button" onClick={() => onWatch(g.id)}>
                   👁 Watch
@@ -127,7 +172,7 @@ export function Lobby({ client, state, onWatch }: Props) {
           <p className="muted">No games being played right now.</p>
         )}
         <p className="muted lobby-footer">
-          {me ? `You are ${me.name}.` : 'Not connected.'} {lobby ? `${lobby.online} online.` : ''}
+          {me ? `You are ${me.name}${me.registered ? '' : ' (guest)'}.` : 'Not connected.'} {lobby ? `${lobby.online} online.` : ''}
         </p>
       </section>
     </main>

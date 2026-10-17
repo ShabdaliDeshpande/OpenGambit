@@ -32,9 +32,9 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Reconnection: resume the game after a disconnect; a "claim victory" option when the opponent stays away too long.
 - Spectators.
 
-## Phase 5: Accounts with Glicko-2 ratings
+## Phase 5: Accounts with Glicko-2 ratings (done)
 - Sign-up, login and sessions.
-- A database for users, games and ratings.
+- A database for users, games and ratings. **Decided:** SQLite (Node's built-in `node:sqlite`) locally, and PostgreSQL through `pg` (MIT) when `DATABASE_URL` is set, so a free host keeps accounts across redeploys. Guests keep playing casual games.
 - Glicko-2 rating, deviation and volatility per time-control category.
 - Profiles and game history.
 

@@ -2,6 +2,7 @@ node_modules
 dist
 coverage
 reference
+data
 public/puzzles/imported.json
 .git
 *.log

@@ -10,7 +10,7 @@ export interface ReceivedGame {
 
 export interface OnlineState {
   status: ConnectionStatus;
-  me: { id: string; name: string } | null;
+  me: { id: string; name: string; registered: boolean } | null;
   lobby: LobbySnapshot | null;
   games: Record<string, ReceivedGame>;
   /** Latest error from the server, with a counter so repeats still show. */
@@ -89,6 +89,15 @@ export class OnlineClient {
     this.send({ t: 'leave', game });
   }
 
+  /** Opens a fresh connection, e.g. after signing in or out, so the server sees the new session. */
+  reconnect() {
+    const old = this.ws;
+    this.ws = null;
+    old?.close();
+    this.retryMs = 500;
+    this.open();
+  }
+
   private set(patch: Partial<OnlineState>) {
     this.state = { ...this.state, ...patch };
     for (const l of this.listeners) l();
@@ -119,9 +128,10 @@ export class OnlineClient {
         this.ws?.send(JSON.stringify({ t: 'pong', s: msg.s } satisfies ClientMessage));
         return;
       case 'welcome':
-        saveToken(msg.token);
+        // accounts are recognised by their cookie; only guests keep a token
+        if (msg.token) saveToken(msg.token);
         this.retryMs = 500;
-        this.set({ status: 'online', me: { id: msg.id, name: msg.name } });
+        this.set({ status: 'online', me: { id: msg.id, name: msg.name, registered: msg.registered } });
         if (this.wantLobby) this.send({ t: 'lobby', on: true });
         for (const game of this.watching) this.send({ t: 'watch', game });
         return;
@@ -147,4 +157,9 @@ let shared: OnlineClient | null = null;
 export function onlineClient(): OnlineClient {
   shared ??= new OnlineClient();
   return shared;
+}
+
+/** Reconnects online play if it has been started (no-op otherwise). */
+export function reconnectOnline(): void {
+  shared?.reconnect();
 }

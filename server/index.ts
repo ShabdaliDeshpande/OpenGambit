@@ -1,10 +1,10 @@
-// Standalone server: serves the built app from dist/ and the game WebSocket.
-// Run `npm run build` first, then `npm start`.
+// Standalone server: serves the built app from dist/, the account API and the
+// game WebSocket. Run `npm run build` first, then `npm start`.
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { WS_PATH } from '../src/online/protocol.ts';
-import { attachGameServer } from './transport.ts';
+import { startBackend } from './backend.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', 'dist');
 const PORT = Number(process.env.PORT ?? 8787);
@@ -26,7 +26,10 @@ if (!existsSync(join(ROOT, 'index.html'))) {
   process.exit(1);
 }
 
+const backend = await startBackend();
+
 const server = createServer((req, res) => {
+  if ((req.url ?? '').startsWith('/api/')) return backend.api(req, res);
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405).end();
     return;
@@ -62,11 +65,8 @@ const server = createServer((req, res) => {
   else createReadStream(file).pipe(res);
 });
 
-// TRUST_PROXY=1 when running behind a hosting proxy, so connection limits use the real client address
-attachGameServer(server, {}, {
-  trustProxy: process.env.TRUST_PROXY === '1',
-  maxConnsPerIp: Number(process.env.MAX_CONNS_PER_IP ?? 20),
-});
+// TRUST_PROXY=1 when running behind a hosting proxy, so limits use the real client address
+backend.attach(server, { maxConnsPerIp: Number(process.env.MAX_CONNS_PER_IP ?? 20) });
 // nothing else is upgraded here
 server.on('upgrade', (req, socket) => {
   if ((req.url ?? '').split('?')[0] !== WS_PATH) socket.destroy();

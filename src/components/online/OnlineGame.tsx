@@ -8,6 +8,7 @@ import { describeResult } from '../../chess/gameEnd';
 import { useKeyboardNav } from '../../hooks/useKeyboardNav';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import { clockMs, fenAfter, onlinePgn, replay, withPending } from '../../online/view';
+import { diffText, ratingText } from '../../account/api';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 const seconds = (ms: number) => Math.ceil(ms / 1000);
@@ -19,9 +20,10 @@ interface Props {
   state: OnlineState;
   onBack: () => void;
   onAnalyse: (pgn: string) => void;
+  onOpenProfile: (name: string) => void;
 }
 
-export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse }: Props) {
+export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, onOpenProfile }: Props) {
   const received = state.games[gameId];
   const snap = received?.snap;
   const [pending, setPending] = useState<{ uci: string; ply: number } | null>(null);
@@ -122,7 +124,15 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse }:
       <div className={`player ${where}${playing && turn === c ? ' to-move' : ''}`}>
         <span className="name">
           <span className={`presence ${s.online ? 'on' : 'off'}`} title={s.online ? 'Connected' : 'Disconnected'} aria-label={s.online ? 'connected' : 'disconnected'} />
-          {s.name}
+          {s.registered ? (
+            <button type="button" className="link-button player-link" onClick={() => onOpenProfile(s.name)}>
+              {s.name}
+            </button>
+          ) : (
+            s.name
+          )}
+          {s.rating && <span className="muted rating"> {ratingText(s.rating)}</span>}
+          {s.diff !== null && <strong className={`diff ${s.diff >= 0 ? 'up' : 'down'}`}> {diffText(s.diff)}</strong>}
           {you === c && <span className="muted"> (you)</span>}
         </span>
         <ClockDisplay ms={clockMs(snap, received.at, now, c)} running={playing && snap.clock.running === c} label={colorName(c)} />
@@ -139,7 +149,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse }:
       <aside className="side">
         <section className="panel game">
           <p className="muted game-meta">
-            {tc?.label ?? snap.tc} · {you ? `playing ${colorName(you)}` : 'spectating'}
+            {tc?.label ?? snap.tc} · {snap.rated ? 'Rated' : 'Casual'} · {you ? `playing ${colorName(you)}` : 'spectating'}
             {snap.spectators > 0 && ` · 👁 ${snap.spectators} watching`}
           </p>
 

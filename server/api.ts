@@ -1,0 +1,231 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { TLSSocket } from 'node:tls';
+import {
+  checkPassword,
+  checkUsername,
+  clearedSessionCookie,
+  dummyHash,
+  hashPassword,
+  LoginLimiter,
+  readCookie,
+  SESSION_COOKIE,
+  sessionCookie,
+  verifyPassword,
+} from './auth.ts';
+import { CATEGORIES, currentGlicko, displayRating, SESSION_TTL_MS, type Ratings, type StoredGame, type Store, type User } from './store.ts';
+import { clientIp, sameOrigin } from './transport.ts';
+import type { Account } from './types.ts';
+
+export interface ApiOptions {
+  trustProxy?: boolean;
+  now?: () => number;
+  /** Failed logins allowed per username or address within 15 minutes. */
+  maxLoginFailures?: number;
+  /** New accounts allowed per address per hour. */
+  maxSignupsPerHour?: number;
+}
+
+const MAX_BODY = 4096;
+const GAME_ID = /^[A-Za-z0-9]{1,16}$/;
+
+class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
+  res.end(JSON.stringify(body));
+}
+
+function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    if (!(req.headers['content-type'] ?? '').startsWith('application/json')) return reject(new HttpError(415, 'Expected JSON.'));
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      // keep reading (and dropping) the rest, so the 413 reply can still be sent
+      if (size <= MAX_BODY) chunks.push(chunk);
+      else if (size > MAX_BODY * 16) req.destroy();
+    });
+    req.on('end', () => {
+      if (size > MAX_BODY) return reject(new HttpError(413, 'Request too large.'));
+      try {
+        const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+        resolve(value as Record<string, unknown>);
+      } catch {
+        reject(new HttpError(400, 'Invalid JSON.'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const isHttps = (req: IncomingMessage, trustProxy: boolean) =>
+  !!(req.socket as TLSSocket).encrypted || (trustProxy && req.headers['x-forwarded-proto'] === 'https');
+
+/** Ratings as the API shows them: rounded, with deviation, game count and the provisional flag. */
+export function publicRatings(ratings: Ratings, now: number) {
+  return Object.fromEntries(
+    CATEGORIES.map(c => {
+      const g = currentGlicko(ratings[c], now);
+      return [c, { ...displayRating(g), deviation: Math.round(g.deviation), games: ratings[c].games }];
+    }),
+  );
+}
+
+export function publicGame(g: StoredGame, withMoves = false) {
+  const side = (c: 'white' | 'black') => ({
+    id: g[`${c}Id`],
+    name: g[`${c}Name`],
+    rating: g[`${c}Rating`],
+    diff: g[`${c}Diff`],
+  });
+  return {
+    id: g.id,
+    white: side('white'),
+    black: side('black'),
+    tc: g.tc,
+    category: g.category,
+    rated: g.rated,
+    result: g.result,
+    reason: g.reason,
+    plies: g.moves.length,
+    startedAt: g.startedAt,
+    endedAt: g.endedAt,
+    ...(withMoves ? { moves: g.moves } : {}),
+  };
+}
+
+/**
+ * The account API, mounted at /api by the dev server and the standalone
+ * server. Sessions are random tokens in an HttpOnly cookie; the database only
+ * keeps their hash. Every write requires JSON and a same-site Origin, which
+ * together with SameSite=Lax cookies keeps other sites from acting for a user.
+ */
+export function createApi(store: Store, options: ApiOptions = {}) {
+  const { trustProxy = false, now = () => Date.now() } = options;
+  const maxFailures = options.maxLoginFailures ?? 10;
+  const logins = new LoginLimiter(maxFailures, 15 * 60_000, now);
+  // one address may be a whole school or office behind NAT, so it gets more room
+  const loginsByIp = new LoginLimiter(maxFailures * 3, 15 * 60_000, now);
+  const signups = new LoginLimiter(options.maxSignupsPerHour ?? 5, 60 * 60_000, now);
+
+  const currentUser = async (req: IncomingMessage): Promise<User | undefined> => {
+    const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+    return token ? store.userForSession(token) : undefined;
+  };
+
+  const me = async (user: User | undefined) =>
+    user ? { id: user.id, username: user.username, ratings: publicRatings(await store.ratings(user.id), now()) } : null;
+
+  const startSession = async (req: IncomingMessage, res: ServerResponse, user: User) => {
+    const token = await store.createSession(user.id);
+    send(res, 200, { user: await me(user) }, { 'set-cookie': sessionCookie(token, isHttps(req, trustProxy), SESSION_TTL_MS) });
+  };
+
+  async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? '/', 'http://local');
+    const path = url.pathname.replace(/\/+$/, '');
+    const method = req.method ?? 'GET';
+
+    if (method === 'POST') {
+      if (!req.headers.origin || !sameOrigin(req)) throw new HttpError(403, 'Cross-site request refused.');
+      const ip = clientIp(req, trustProxy);
+
+      if (path === '/api/signup') {
+        const body = await readJson(req);
+        const problem = checkUsername(body.username) ?? checkPassword(body.password, String(body.username));
+        if (problem) throw new HttpError(400, problem);
+        if (signups.blocked(ip)) throw new HttpError(429, 'Too many new accounts from your address. Try again later.');
+        const user = await store.createUser(body.username as string, await hashPassword(body.password as string));
+        if (!user) throw new HttpError(409, 'That username is taken.');
+        signups.fail(ip);
+        return startSession(req, res, user);
+      }
+
+      if (path === '/api/login') {
+        const body = await readJson(req);
+        if (typeof body.username !== 'string' || typeof body.password !== 'string' || body.username.length > 40 || body.password.length > 128)
+          throw new HttpError(400, 'Enter your username and password.');
+        const key = `user:${body.username.toLowerCase()}`;
+        if (logins.blocked(key) || loginsByIp.blocked(ip)) throw new HttpError(429, 'Too many failed attempts. Try again in 15 minutes.');
+        const found = await store.credentials(body.username);
+        const ok = await verifyPassword(body.password, found?.passwordHash ?? (await dummyHash()));
+        if (!found || !ok) {
+          logins.fail(key);
+          loginsByIp.fail(ip);
+          throw new HttpError(401, 'Wrong username or password.');
+        }
+        logins.succeed(key);
+        return startSession(req, res, found.user);
+      }
+
+      if (path === '/api/logout') {
+        const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+        if (token) await store.deleteSession(token);
+        return send(res, 200, { user: null }, { 'set-cookie': clearedSessionCookie(isHttps(req, trustProxy)) });
+      }
+      throw new HttpError(404, 'Not found.');
+    }
+
+    if (method !== 'GET') throw new HttpError(405, 'Method not allowed.');
+
+    if (path === '/api/me') return send(res, 200, { user: await me(await currentUser(req)) });
+
+    const profile = /^\/api\/users\/([^/]+)$/.exec(path);
+    const history = /^\/api\/users\/([^/]+)\/games$/.exec(path);
+    if (profile || history) {
+      const name = decodeURIComponent((profile ?? history)![1]!);
+      const user = name.length <= 40 ? await store.userByName(name) : undefined;
+      if (!user) throw new HttpError(404, 'No such player.');
+      const before = Number(url.searchParams.get('before')) || undefined;
+      const games = (await store.gamesOf(user.id, 20, before)).map(g => publicGame(g));
+      if (history) return send(res, 200, { games });
+      return send(res, 200, {
+        user: { id: user.id, username: user.username, createdAt: user.createdAt },
+        ratings: publicRatings(await store.ratings(user.id), now()),
+        totalGames: await store.countGames(user.id),
+        games,
+      });
+    }
+
+    const game = /^\/api\/games\/([^/]+)$/.exec(path);
+    if (game) {
+      const id = game[1]!;
+      const stored = GAME_ID.test(id) ? await store.game(id) : undefined;
+      if (!stored) throw new HttpError(404, 'No such game.');
+      return send(res, 200, { game: publicGame(stored, true) });
+    }
+
+    throw new HttpError(404, 'Not found.');
+  }
+
+  /** Node/connect style handler; requests outside /api are passed on. */
+  const handler = (req: IncomingMessage, res: ServerResponse, next?: () => void) => {
+    if (!(req.url ?? '').startsWith('/api/') && req.url !== '/api') {
+      if (next) next();
+      else send(res, 404, { error: 'Not found.' });
+      return;
+    }
+    route(req, res).catch((err: unknown) => {
+      if (res.headersSent) return;
+      if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+      console.error('API error:', err);
+      send(res, 500, { error: 'Something went wrong.' });
+    });
+  };
+
+  /** The account behind a WebSocket upgrade request's session cookie. */
+  const identify = async (req: IncomingMessage): Promise<Account | null> => {
+    const user = await currentUser(req);
+    return user ? { user, ratings: await store.ratings(user.id) } : null;
+  };
+
+  return { handler, identify };
+}

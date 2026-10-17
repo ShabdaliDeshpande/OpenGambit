@@ -65,7 +65,7 @@ it('pairs two players over WebSockets, relays moves to a spectator and resumes a
 
   alice.send({ t: 'lobby', on: true });
   bob.send({ t: 'lobby', on: true });
-  alice.send({ t: 'seek', tc: '3+2', color: 'w' });
+  alice.send({ t: 'seek', tc: '3+2', color: 'w', rated: false });
   const lobby = await bob.next('lobby', m => m.lobby.seeks.length === 1);
   bob.send({ t: 'acceptSeek', id: lobby.lobby.seeks[0]!.id });
   const { game } = await alice.next('started');
@@ -89,7 +89,7 @@ it('pairs two players over WebSockets, relays moves to a spectator and resumes a
   bob.ws.close();
   await alice.next('game', m => !m.game.black.online && m.game.opponentGone !== null);
   const again = await open(url);
-  again.send({ t: 'hello', token: bobWelcome.token });
+  again.send({ t: 'hello', token: bobWelcome.token ?? '' });
   expect((await again.next('welcome')).id).toBe(bobWelcome.id);
   expect((await again.next('started')).game).toBe(game);
   again.send({ t: 'watch', game });

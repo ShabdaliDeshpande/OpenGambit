@@ -13,10 +13,13 @@ export function linkedGame(): string | null {
 
 interface Props {
   active: boolean;
+  signedIn: boolean;
+  onSignIn: () => void;
+  onOpenProfile: (name: string) => void;
   onAnalyse: (pgn: string) => void;
 }
 
-export function OnlineView({ active, onAnalyse }: Props) {
+export function OnlineView({ active, signedIn, onSignIn, onOpenProfile, onAnalyse }: Props) {
   const [gameId, setGameId] = useState<string | null>(linkedGame);
   const { client, state } = useOnline(active || gameId !== null);
   const seenStarted = useRef(0);
@@ -73,9 +76,17 @@ export function OnlineView({ active, onAnalyse }: Props) {
           state={state}
           onBack={() => open(null)}
           onAnalyse={onAnalyse}
+          onOpenProfile={onOpenProfile}
         />
       ) : (
-        <Lobby client={client} state={state} onWatch={id => open(id)} />
+        <Lobby
+          client={client}
+          state={state}
+          signedIn={signedIn}
+          onSignIn={onSignIn}
+          onOpenProfile={onOpenProfile}
+          onWatch={id => open(id)}
+        />
       )}
     </>
   );

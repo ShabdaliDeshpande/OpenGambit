@@ -1,0 +1,87 @@
+// Calls to the account API (/api). The session lives in an HttpOnly cookie,
+// so the page never sees it.
+
+export type Category = 'bullet' | 'blitz' | 'rapid' | 'classical';
+
+export const CATEGORIES: readonly Category[] = ['bullet', 'blitz', 'rapid', 'classical'];
+
+export const CATEGORY_LABEL: Record<Category, string> = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical' };
+
+export interface PublicRating {
+  rating: number;
+  provisional: boolean;
+  deviation: number;
+  games: number;
+}
+
+export interface Me {
+  id: string;
+  username: string;
+  ratings: Record<Category, PublicRating>;
+}
+
+export interface GameSide {
+  id: string | null;
+  name: string;
+  rating: number | null;
+  diff: number | null;
+}
+
+export interface PublicGame {
+  id: string;
+  white: GameSide;
+  black: GameSide;
+  tc: string;
+  category: Category;
+  rated: boolean;
+  result: '1-0' | '0-1' | '1/2-1/2';
+  reason: string;
+  plies: number;
+  startedAt: number;
+  endedAt: number;
+  moves?: string[];
+}
+
+export interface Profile {
+  user: { id: string; username: string; createdAt: number };
+  ratings: Record<Category, PublicRating>;
+  totalGames: number;
+  games: PublicGame[];
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function call<T>(path: string, body?: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {
+    throw new ApiError(0, 'Can’t reach the server.');
+  }
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new ApiError(res.status, data.error ?? `Request failed (${res.status}).`);
+  return data;
+}
+
+export const fetchMe = async () => (await call<{ user: Me | null }>('/api/me')).user;
+export const signUp = async (username: string, password: string) => (await call<{ user: Me }>('/api/signup', { username, password })).user;
+export const logIn = async (username: string, password: string) => (await call<{ user: Me }>('/api/login', { username, password })).user;
+export const logOut = async () => {
+  await call('/api/logout', {});
+};
+export const fetchProfile = (name: string) => call<Profile>(`/api/users/${encodeURIComponent(name)}`);
+export const fetchGames = async (name: string, before: number) =>
+  (await call<{ games: PublicGame[] }>(`/api/users/${encodeURIComponent(name)}/games?before=${before}`)).games;
+export const fetchGame = async (id: string) => (await call<{ game: PublicGame }>(`/api/games/${encodeURIComponent(id)}`)).game;
+
+/** "1734" or "1500?" while provisional. */
+export const ratingText = (r: { rating: number; provisional: boolean } | null | undefined) =>
+  r ? `${r.rating}${r.provisional ? '?' : ''}` : '';
+
+export const diffText = (d: number | null | undefined) => (d === null || d === undefined ? '' : d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '±0');

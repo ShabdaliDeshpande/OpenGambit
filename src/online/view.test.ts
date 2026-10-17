@@ -6,8 +6,9 @@ import { clockMs, fenAfter, onlinePgn, replay, withPending } from './view';
 const snapshot = (over: Partial<GameSnapshot> = {}): GameSnapshot => ({
   id: 'g1',
   tc: '3+2',
-  white: { id: 'a', name: 'Guest 1111', online: true },
-  black: { id: 'b', name: 'Guest 2222', online: true },
+  rated: false,
+  white: { id: 'a', name: 'Guest 1111', online: true, registered: false, rating: null, diff: null },
+  black: { id: 'b', name: 'Guest 2222', online: true, registered: false, rating: null, diff: null },
   you: 'w',
   moves: ['e2e4', 'e7e5'],
   status: 'playing',
@@ -53,5 +54,17 @@ describe('online view helpers', () => {
     expect(pgn).toContain('[Result "0-1"]');
     const tree = readPgn(pgn);
     expect(tree.headers.Black).toBe('Guest 2222');
+  });
+
+  it('puts ratings in the PGN of a rated game', () => {
+    const pgn = onlinePgn(
+      snapshot({
+        rated: true,
+        white: { id: 'a', name: 'Ann', online: true, registered: true, rating: { rating: 1612, provisional: false }, diff: 8 },
+      }),
+    );
+    expect(pgn).toContain('[Event "Rated online game"]');
+    expect(pgn).toContain('[WhiteElo "1612"]');
+    expect(pgn).not.toContain('BlackElo');
   });
 });

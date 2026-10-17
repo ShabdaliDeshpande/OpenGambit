@@ -105,18 +105,37 @@ Open the **Play online** tab. No account is needed: each browser tab gets a gues
 
 The server keeps everything in memory, in one Node process: [server/hub.ts](server/hub.ts) holds the players, seeks and rooms, [server/room.ts](server/room.ts) runs one game, and [server/transport.ts](server/transport.ts) connects them to WebSockets at `/ws`. The same server runs inside `npm run dev` (as a Vite plugin) and in `npm start`. Set `PORT` and `HOST` to change where `npm start` listens. It binds to 127.0.0.1 by default; use `HOST=0.0.0.0` to play across your local network.
 
+## Features (Phase 5: Accounts and ratings)
+
+| Area | What it does |
+|---|---|
+| Accounts | **Sign in** in the top bar opens a dialog to sign in or create an account (username of 3–20 letters, digits, `_` or `-`; password of at least 8 characters). Guests can still play casual games without an account. |
+| Rated games | When you're signed in, the lobby's **Mode** choice lets you post a **Rated** or **Casual** seek. Rated seeks pair only with rated seeks, and only signed-in players can accept them. Names in the lobby and the game show ratings ("1500?" while provisional), and the rating change appears when a rated game ends. |
+| Ratings | Glicko-2, kept separately for bullet, blitz, rapid and classical. A new rating starts at 1500 ± 500. Its uncertainty shrinks as you play and grows back slowly while you don't. The rating is shown as provisional ("?") while the uncertainty is 110 or more. One game can't move a rating by more than 700 points, and ratings never drop below 400. |
+| Profiles | Click your name in the top bar, or any player's name, for their profile: ratings per category with uncertainty and number of games, and their game history (opponent, result and how it ended, time control, rating change). **Analyse** opens any saved game on the analysis board. A profile can also be shared as a `?user=<name>` link. |
+| What gets saved | Finished games with at least one signed-in player. Aborted games and guest-only games are not saved. |
+
+**Security.**
+- **Passwords** are hashed with scrypt and a random salt per password.
+- **Sessions** are random tokens in an `HttpOnly`, `SameSite=Lax` cookie, which is `Secure` over HTTPS. The database stores only a hash of each token. Sessions last 30 days.
+- **Requests that change data** must be JSON and come from the same site.
+- **Failed logins** are limited per username (10 in 15 minutes) and per address (30). New accounts are limited to 5 per address per hour.
+
+**Database.** If `DATABASE_URL` is set to a PostgreSQL connection string, the server uses it. Otherwise it uses a SQLite file at `data/chess.db` (change it with `SQLITE_PATH`) through Node's built-in `node:sqlite`. The server creates and upgrades the tables by itself on start.
+
 ## Deploying
 
-The app is one Node process that serves the built files and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
+The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
 
 - **[Dockerfile](Dockerfile):** builds the app and runs `node server/index.ts` on port 8787 (`PORT` overrides it). It works on any Docker host.
 - **[render.yaml](render.yaml):** a Render Blueprint for this Dockerfile, on the free plan, with the `/healthz` health check. Push the project to a GitHub repository, then in Render choose **New → Blueprint** and pick the repository. Render provides the HTTPS address.
-- **Behind a proxy**, set `TRUST_PROXY=1` so the per-address connection limit sees real client addresses (render.yaml already sets it). `MAX_CONNS_PER_IP` (default 20) changes that limit.
+- **Database for a deployed site:** create a PostgreSQL database, for example a free one at [Neon](https://neon.tech). Copy its connection string (`postgresql://…?sslmode=require`) and give it to Render as `DATABASE_URL`. The Blueprint asks for it; later you can change it under the service's **Environment** settings. Without it, accounts are stored in the container and wiped on every restart or deploy.
+- **Behind a proxy**, set `TRUST_PROXY=1` so limits see real client addresses and session cookies are marked `Secure` (render.yaml already sets it). `MAX_CONNS_PER_IP` (default 20) changes the socket limit.
 
 Things to know about hosting it:
-- Games live in memory. A restart or redeploy ends running games.
+- Running games live in memory. A restart or redeploy ends them. Accounts, ratings and finished games are kept in the database.
 - Render's free plan stops the service after about 15 minutes without visitors, and the next visit takes a while to start it again.
-- The server accepts WebSocket connections only from pages on its own host. It limits sockets per address and messages per connection. It has no accounts or moderation.
+- The server accepts WebSocket connections and changes only from pages on its own host. It limits sockets per address, messages per connection, logins and sign-ups. It has no moderation.
 
 ## Project layout
 
@@ -145,13 +164,22 @@ src/
     client.ts     the WebSocket client (reconnects and re-subscribes by itself)
     view.ts       clock countdown, replaying moves, PGN export
   components/online/  OnlineView, Lobby, OnlineGame
-  App.tsx       tabs and theme; all screens stay mounted so a running game keeps its clock
-server/         the online game server (Node, run directly from TypeScript)
-  hub.ts        players, lobby seeks, pairing, message checks and rate limits
+  account/api.ts  calls to the account API
+  components/account/  AccountDialog (sign in / create account), ProfileView
+  App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
+server/         the server (Node, run directly from TypeScript)
+  backend.ts    opens the database and wires the API and game server together
+  hub.ts        players and accounts, lobby seeks, pairing, saving finished games, message checks
   room.ts       one game: move validation, clocks with lag compensation, draws, aborts, disconnects
-  transport.ts  WebSocket endpoint at /ws on an existing HTTP server
+  transport.ts  WebSocket endpoint at /ws, with origin check, limits and session lookup
+  api.ts        account API at /api: sign-up, login, logout, profiles, game history
+  auth.ts       password hashing, input checks, cookies, login rate limits
+  store.ts      users, sessions, ratings and games on top of the database
+  rating/glicko2.ts  the Glicko-2 rating system
+  db/           one interface over SQLite (node:sqlite) and PostgreSQL (pg), plus migrations
   index.ts      standalone server for `npm start`
   config.ts     timeouts and limits
+scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a running server
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -168,7 +196,12 @@ This project has no GPL or AGPL dependencies.
 | react-dom | 19.3.1 | MIT |
 | scheduler (dependency of react-dom) | 0.28.0 | MIT |
 | chess.js | 1.4.0 | BSD-2-Clause |
-| ws (game server only) | 8.18.3 | MIT |
+| ws (server only) | 8.18.3 | MIT |
+| pg (server only, PostgreSQL client) | 8.16.3 | MIT |
+| pg's dependencies (server only) | pg-pool 3.14.0, pg-protocol 1.16.1, pg-types 2.2.0, pg-connection-string 2.14.1, pgpass 1.0.5, pg-cloudflare 1.4.1, postgres-array 2.0.0, postgres-bytea 1.0.1, postgres-date 1.0.7, postgres-interval 1.2.0, xtend 4.0.2 | MIT |
+| pg's dependencies (server only) | pg-int8 1.0.1, split2 4.2.0 | ISC |
+
+SQLite comes from Node's built-in `node:sqlite` module, so no extra package is needed for it.
 
 ### Development and build only (not shipped)
 
@@ -182,6 +215,7 @@ This project has no GPL or AGPL dependencies.
 | @types/react-dom | 19.3.0 | MIT |
 | @types/ws | 8.18.1 | MIT |
 | @types/node | 24.10.1 | MIT |
+| @types/pg | 8.15.5 | MIT |
 
 Transitive development packages:
 
@@ -195,10 +229,12 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 
 ## Known gaps
 
-- **Online games live only in server memory.** Restarting the server ends every game, and finished games are forgotten after 15 minutes.
-- **No accounts or ratings yet** (that is Phase 5). Guests are per tab, so opening a game link in a new tab makes you a spectator.
+- **Running online games live only in server memory.** Restarting the server ends them. Finished games with a signed-in player are saved in the database.
+- **Guests are per tab.** Opening a game link in a new tab as a guest makes you a spectator. Signed-in players are the same player in every tab.
 - **No chat, rematch, takebacks, premoves or extra time** in online games.
-- **Basic protection only.** The server checks messages and origins and limits connections and message rates. It has no TLS of its own (use a host or reverse proxy that provides HTTPS), no accounts and no moderation.
+- **Account features are minimal.** There's no password reset, email, password change, account deletion, leaderboard or rating-range filter for seeks.
+- **The PostgreSQL code path hasn't been run in this project's tests,** because no Postgres server was available. The same store tests run against it when `TEST_DATABASE_URL` points to an empty test database.
+- **Basic protection only.** The server checks messages and origins and limits connections, messages, logins and sign-ups. It has no TLS of its own (use a host or reverse proxy that provides HTTPS) and no moderation.
 - **Lag compensation is a simple model**: half the measured round trip, capped per move and by a refilling budget.
 
 - **No premoves, sounds or move animation.**

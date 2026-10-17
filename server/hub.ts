@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { Color } from 'chess.js';
 import { findTimeControl, type TimeControl } from '../src/chess/clock.ts';
-import type { ClientMessage, LobbySnapshot, SeekColor, ServerMessage } from '../src/online/protocol.ts';
-import type { ServerConfig } from './config.ts';
+import type { ClientMessage, LobbySnapshot, SeekColor, ServerMessage, ShownRating } from '../src/online/protocol.ts';
+import { speedOf, type ServerConfig } from './config.ts';
 import { GameRoom } from './room.ts';
-import type { Conn, Player } from './types.ts';
+import { currentGlicko, displayRating, type Store } from './store.ts';
+import type { Account, Conn, Player } from './types.ts';
 
 interface Seek {
   id: string;
@@ -13,6 +14,7 @@ interface Seek {
   conn: Conn;
   tc: TimeControl;
   color: SeekColor;
+  rated: boolean;
   createdAt: number;
 }
 
@@ -48,8 +50,10 @@ function parseMessage(raw: string): ClientMessage | null {
     case 'lobby':
       return typeof o.on === 'boolean' ? { t: 'lobby', on: o.on } : null;
     case 'seek':
-      return isString(o.tc, 8) && (o.color === 'w' || o.color === 'b' || o.color === 'random')
-        ? { t: 'seek', tc: o.tc, color: o.color }
+      return isString(o.tc, 8) &&
+        (o.color === 'w' || o.color === 'b' || o.color === 'random') &&
+        (o.rated === undefined || typeof o.rated === 'boolean')
+        ? { t: 'seek', tc: o.tc, color: o.color, rated: o.rated === true }
         : null;
     case 'cancelSeek':
     case 'acceptSeek':
@@ -82,7 +86,10 @@ function parseMessage(raw: string): ClientMessage | null {
  * transport calls connect / receive / disconnect.
  */
 export class Hub {
+  /** Guests by token. */
   private readonly players = new Map<string, Player>();
+  /** Signed-in players by user id. */
+  private readonly accounts = new Map<string, Player>();
   private readonly conns = new Set<Conn>();
   private readonly seeks = new Map<string, Seek>();
   private readonly rooms = new Map<string, GameRoom>();
@@ -91,10 +98,13 @@ export class Hub {
   private readonly cleanup = new Set<ReturnType<typeof setTimeout>>();
 
   private readonly cfg: ServerConfig;
+  private readonly store: Store | null;
   private readonly announced = new Set<string>();
+  private readonly writes = new Set<Promise<void>>();
 
-  constructor(cfg: ServerConfig) {
+  constructor(cfg: ServerConfig, store: Store | null = null) {
     this.cfg = cfg;
+    this.store = store;
     this.pingTimer = setInterval(() => this.pingAll(), cfg.pingMs);
   }
 
@@ -108,11 +118,17 @@ export class Hub {
     return this.rooms.get(id);
   }
 
-  connect(send: (msg: ServerMessage) => void, close: () => void): Conn {
+  /** Resolves once every finished game handed to the database has been saved. */
+  async settled(): Promise<void> {
+    while (this.writes.size) await Promise.all([...this.writes]);
+  }
+
+  connect(send: (msg: ServerMessage) => void, close: () => void, account: Account | null = null): Conn {
     const now = this.cfg.now();
     const conn: Conn = {
       id: this.nextConnId++,
       player: null,
+      account,
       send,
       close,
       lobby: false,
@@ -153,7 +169,7 @@ export class Hub {
         if (msg.on) conn.send({ t: 'lobby', lobby: this.lobbySnapshot() });
         return;
       case 'seek':
-        return this.report(conn, this.seek(conn, player, msg.tc, msg.color));
+        return this.report(conn, this.seek(conn, player, msg.tc, msg.color, msg.rated));
       case 'cancelSeek': {
         const seek = this.seeks.get(msg.id);
         if (seek?.owner === player) this.dropSeeks(s => s === seek);
@@ -163,8 +179,9 @@ export class Hub {
         const seek = this.seeks.get(msg.id);
         if (!seek) return this.report(conn, 'That seek is no longer available.');
         if (seek.owner === player) return this.report(conn, 'You can’t accept your own seek.');
+        if (seek.rated && !player.account) return this.report(conn, 'Sign in to play rated games.');
         const ownerColor: Color = seek.color === 'random' ? (this.cfg.random() < 0.5 ? 'w' : 'b') : seek.color;
-        this.startGame(seek.tc, ownerColor === 'w' ? seek.owner : player, ownerColor === 'w' ? player : seek.owner);
+        this.startGame(seek.tc, ownerColor === 'w' ? seek.owner : player, ownerColor === 'w' ? player : seek.owner, seek.rated);
         return;
       }
       case 'watch': {
@@ -204,32 +221,45 @@ export class Hub {
   }
 
   lobbySnapshot(): LobbySnapshot {
-    const online = [...this.players.values()].filter(p => p.conns.size > 0).length;
+    const online = [...this.players.values(), ...this.accounts.values()].filter(p => p.conns.size > 0).length;
     return {
       seeks: [...this.seeks.values()].map(s => ({
         id: s.id,
         owner: s.owner.id,
         name: s.owner.name,
+        registered: s.owner.account !== null,
+        rating: this.shownRating(s.owner, s.tc),
         tc: s.tc.id,
         color: s.color,
+        rated: s.rated,
         createdAt: s.createdAt,
       })),
       games: [...this.rooms.values()]
         .filter(r => r.status === 'playing')
-        .map(r => ({ id: r.id, tc: r.tc.id, white: r.player('w').name, black: r.player('b').name })),
+        .map(r => ({ id: r.id, tc: r.tc.id, rated: r.rated, white: r.player('w').name, black: r.player('b').name })),
       online,
     };
   }
 
   private hello(conn: Conn, token: string | undefined): void {
     if (conn.player) return;
-    let player = token && TOKEN.test(token) ? this.players.get(token) : undefined;
+    let player: Player | undefined;
+    if (conn.account) {
+      // the same account in several tabs is one player
+      const { user } = conn.account;
+      player = this.accounts.get(user.id);
+      if (!player) {
+        player = { id: user.id, token: '', name: user.username, account: conn.account, conns: new Set(), lastSeen: this.cfg.now() };
+        this.accounts.set(user.id, player);
+      }
+    } else player = token && TOKEN.test(token) ? this.players.get(token) : undefined;
     if (!player) {
       const fresh = randomBytes(18).toString('base64url');
       player = {
         id: randomId(8),
         token: fresh,
         name: `Guest ${1000 + Math.floor(this.cfg.random() * 9000)}`,
+        account: null,
         conns: new Set(),
         lastSeen: this.cfg.now(),
       };
@@ -237,7 +267,7 @@ export class Hub {
     }
     conn.player = player;
     player.conns.add(conn);
-    conn.send({ t: 'welcome', token: player.token, id: player.id, name: player.name });
+    conn.send({ t: 'welcome', token: player.account ? null : player.token, id: player.id, name: player.name, registered: !!player.account });
     // a reconnecting player is told about their unfinished games
     for (const room of this.rooms.values())
       if (room.status === 'playing' && room.colorOf(player)) conn.send({ t: 'started', game: room.id });
@@ -268,38 +298,52 @@ export class Hub {
   private forgetIdlePlayers(now: number): void {
     const seated = new Set<Player>();
     for (const room of this.rooms.values()) if (room.status === 'playing') seated.add(room.player('w')).add(room.player('b'));
-    for (const [token, p] of this.players)
-      if (p.conns.size === 0 && now - p.lastSeen > this.cfg.playerTtlMs && !seated.has(p)) this.players.delete(token);
+    for (const map of [this.players, this.accounts])
+      for (const [key, p] of map)
+        if (p.conns.size === 0 && now - p.lastSeen > this.cfg.playerTtlMs && !seated.has(p)) map.delete(key);
   }
 
-  private seek(conn: Conn, player: Player, tcId: string, color: SeekColor): string | null {
+  private seek(conn: Conn, player: Player, tcId: string, color: SeekColor, rated: boolean): string | null {
     const tc = findTimeControl(tcId);
     if (!tc) return 'Unknown time control.';
     if (!conn.lobby) return 'Open the lobby to create a seek.';
+    if (rated && !player.account) return 'Sign in to play rated games.';
     const own = [...this.seeks.values()].filter(s => s.owner === player);
-    if (own.some(s => s.tc.id === tc.id && s.color === color)) return 'You already have that seek.';
+    if (own.some(s => s.tc.id === tc.id && s.color === color && s.rated === rated)) return 'You already have that seek.';
     if (own.length >= this.cfg.maxSeeksPerPlayer) return `You can have at most ${this.cfg.maxSeeksPerPlayer} seeks.`;
 
     // pair at once with a compatible seek from someone else, oldest first
     const match = [...this.seeks.values()].find(
-      s => s.owner !== player && s.tc.id === tc.id && (s.color === 'random' || color === 'random' || s.color !== color),
+      s =>
+        s.owner !== player &&
+        s.tc.id === tc.id &&
+        s.rated === rated &&
+        (s.color === 'random' || color === 'random' || s.color !== color),
     );
     if (match) {
       const ownerColor: Color =
         match.color !== 'random' ? match.color : color !== 'random' ? (color === 'w' ? 'b' : 'w') : this.cfg.random() < 0.5 ? 'w' : 'b';
-      this.startGame(tc, ownerColor === 'w' ? match.owner : player, ownerColor === 'w' ? player : match.owner);
+      this.startGame(tc, ownerColor === 'w' ? match.owner : player, ownerColor === 'w' ? player : match.owner, rated);
       return null;
     }
-    const seek: Seek = { id: randomId(8), owner: player, conn, tc, color, createdAt: this.cfg.now() };
+    const seek: Seek = { id: randomId(8), owner: player, conn, tc, color, rated, createdAt: this.cfg.now() };
     this.seeks.set(seek.id, seek);
     this.broadcastLobby();
     return null;
   }
 
-  private startGame(tc: TimeControl, white: Player, black: Player): void {
+  private shownRating(player: Player, tc: TimeControl): ShownRating | null {
+    if (!player.account) return null;
+    return displayRating(currentGlicko(player.account.ratings[speedOf(tc)], this.cfg.now()));
+  }
+
+  private startGame(tc: TimeControl, white: Player, black: Player, rated: boolean): void {
     let id = randomId(8);
     while (this.rooms.has(id)) id = randomId(8);
-    const room = new GameRoom(id, tc, white, black, this.cfg, r => this.roomChanged(r));
+    const room = new GameRoom(id, tc, white, black, this.cfg, r => this.roomChanged(r), {
+      rated: rated && !!white.account && !!black.account,
+      ratings: { w: this.shownRating(white, tc), b: this.shownRating(black, tc) },
+    });
     this.rooms.set(id, room);
     // both players are now busy: their other seeks go away
     this.dropSeeks(s => s.owner === white || s.owner === black, false);
@@ -312,6 +356,7 @@ export class Hub {
     // the game just ended: update the lobby's list and forget the room later
     this.announced.add(room.id);
     this.broadcastLobby();
+    if (room.status === 'finished') this.save(room);
     const timer = setTimeout(() => {
       this.cleanup.delete(timer);
       this.announced.delete(room.id);
@@ -320,6 +365,45 @@ export class Hub {
       for (const c of room.watchers) c.rooms.delete(room.id);
     }, this.cfg.finishedTtlMs);
     this.cleanup.add(timer);
+  }
+
+  /** Stores a finished game that involves an account, and scores it if it was rated. */
+  private save(room: GameRoom): void {
+    const [white, black] = [room.player('w'), room.player('b')];
+    if (!this.store || !room.result || (!white.account && !black.account)) return;
+    const category = speedOf(room.tc);
+    const write = this.store
+      .finishGame({
+        id: room.id,
+        whiteId: white.account?.user.id ?? null,
+        blackId: black.account?.user.id ?? null,
+        whiteName: white.name,
+        blackName: black.name,
+        tc: room.tc.id,
+        category,
+        rated: room.rated,
+        moves: room.moves,
+        result: room.result.result,
+        reason: room.result.reason,
+        startedAt: room.createdAt,
+        endedAt: room.endedAt ?? this.cfg.now(),
+      })
+      .then(change => {
+        if (!change) return;
+        const now = this.cfg.now();
+        for (const [player, side, color] of [
+          [white, change.white, 'w'],
+          [black, change.black, 'b'],
+        ] as const) {
+          const info = player.account!.ratings[category];
+          player.account!.ratings[category] = { glicko: side.after, games: info.games + 1, updatedAt: now };
+          room.diffs[color] = Math.round(side.after.rating) - Math.round(side.before.rating);
+        }
+        room.broadcast();
+      })
+      .catch(err => console.error(`Could not save game ${room.id}:`, err))
+      .finally(() => this.writes.delete(write));
+    this.writes.add(write);
   }
 
   private dropSeeks(match: (s: Seek) => boolean, broadcast = true): void {

@@ -1111,3 +1111,153 @@ button.link-button {
   background: #2e9d5b;
   border-color: #2e9d5b;
 }
+
+/* ---------- accounts and profiles ---------- */
+
+.small {
+  font-size: 13px;
+}
+
+.account-button.on {
+  border-color: var(--accent);
+}
+
+.account-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.account-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.account-dialog h2 {
+  margin-top: 0;
+}
+
+.account-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dialog-actions {
+  margin-top: 12px;
+}
+
+.profile {
+  display: grid;
+  gap: 14px;
+  max-width: 900px;
+}
+
+.profile-name {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+
+.rating-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.rating-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.rating-card .stat-value {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.history {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-item > button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+.history-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.history .me {
+  font-weight: 600;
+}
+
+.result-badge {
+  display: inline-block;
+  min-width: 44px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+  background: var(--muted);
+}
+
+.result-badge.win {
+  background: #2e9d5b;
+}
+
+.result-badge.loss {
+  background: var(--danger);
+}
+
+.diff.up {
+  color: #2e9d5b;
+}
+
+.diff.down {
+  color: var(--danger);
+}
+
+.player-link {
+  font-weight: 600;
+}
+
+/* links to profiles inside text */
+.player button.link-button,
+.seek-table button.link-button,
+.history button.link-button,
+p button.link-button {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.player button.link-button:hover,
+.seek-table button.link-button:hover,
+.history button.link-button:hover,
+p button.link-button:hover {
+  text-decoration: underline;
+}

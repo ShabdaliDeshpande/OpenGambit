@@ -2,4 +2,5 @@ reference/
 node_modules/
 dist/
 coverage/
+data/
 public/puzzles/imported.json

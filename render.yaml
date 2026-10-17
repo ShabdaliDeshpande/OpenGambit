@@ -8,3 +8,8 @@ services:
     envVars:
       - key: TRUST_PROXY
         value: "1"
+      # PostgreSQL connection string, e.g. from a free Neon database. Render asks
+      # for it when the Blueprint is applied. Without it the server uses SQLite
+      # inside the container, which is wiped on every restart or deploy.
+      - key: DATABASE_URL
+        sync: false

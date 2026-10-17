@@ -9,7 +9,7 @@ import {
   timeoutResult,
   type GameResult,
 } from '../src/chess/gameEnd.ts';
-import type { DrawAction, GameSnapshot, GameStatus } from '../src/online/protocol.ts';
+import type { DrawAction, GameSnapshot, GameStatus, ShownRating } from '../src/online/protocol.ts';
 import type { ServerConfig } from './config.ts';
 import type { Conn, Player } from './types.ts';
 
@@ -48,14 +48,30 @@ export class GameRoom {
 
   readonly id: string;
   readonly tc: TimeControl;
+  readonly rated: boolean;
+  readonly createdAt: number;
+  /** Ratings shown next to the names (taken when the game started), and the change once scored. */
+  readonly ratings: Record<Color, ShownRating | null>;
+  readonly diffs: Record<Color, number | null> = { w: null, b: null };
   private readonly cfg: ServerConfig;
   private readonly onChange: (room: GameRoom) => void;
 
-  constructor(id: string, tc: TimeControl, white: Player, black: Player, cfg: ServerConfig, onChange: (room: GameRoom) => void) {
+  constructor(
+    id: string,
+    tc: TimeControl,
+    white: Player,
+    black: Player,
+    cfg: ServerConfig,
+    onChange: (room: GameRoom) => void,
+    options: { rated?: boolean; ratings?: Record<Color, ShownRating | null> } = {},
+  ) {
     this.id = id;
     this.tc = tc;
     this.cfg = cfg;
     this.onChange = onChange;
+    this.rated = options.rated ?? false;
+    this.ratings = options.ratings ?? { w: null, b: null };
+    this.createdAt = cfg.now();
     const seat = (player: Player): Seat => ({
       player,
       lastDrawOfferPly: -Infinity,
@@ -228,11 +244,19 @@ export class GameRoom {
   snapshot(viewer: Conn | null): GameSnapshot {
     const now = this.cfg.now();
     const you = this.colorOf(viewer?.player ?? null);
-    const seat = (c: Color) => ({ id: this.seats[c].player.id, name: this.seats[c].player.name, online: this.isOnline(c) });
+    const seat = (c: Color) => ({
+      id: this.seats[c].player.id,
+      name: this.seats[c].player.name,
+      online: this.isOnline(c),
+      registered: this.seats[c].player.account !== null,
+      rating: this.ratings[c],
+      diff: this.diffs[c],
+    });
     const spectators = [...this.watchers].filter(c => !this.colorOf(c.player)).length;
     return {
       id: this.id,
       tc: this.tc.id,
+      rated: this.rated,
       white: seat('w'),
       black: seat('b'),
       you,
