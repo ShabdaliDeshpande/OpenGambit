@@ -56,3 +56,9 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - A daily puzzle that's the same for everyone each day.
 - A puzzle dashboard: rating chart, totals, strengths and areas to improve by theme, and recent history with replay.
 - The puzzle rating appears on profiles.
+
+## Phase 9: Accounts & leaderboards (done)
+- Change password (signs out your other sessions).
+- Delete account: removes your sign-in, ratings and puzzle history. Your past games stay, but your name in them is replaced.
+- Leaderboards: the top rated players for each speed and for puzzles. Only established (non-provisional) ratings are listed.
+- Rating range on seeks: a signed-in seeker can limit who may accept, for example ±200 of their own rating.

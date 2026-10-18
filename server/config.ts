@@ -1,12 +1,6 @@
-import type { TimeControl } from '../src/chess/clock.ts';
+import { speedOf, type Speed, type TimeControl } from '../src/chess/clock.ts';
 
-export type Speed = 'bullet' | 'blitz' | 'rapid' | 'classical';
-
-/** Speed category from the estimated game length (initial time + 40 increments). */
-export function speedOf(tc: TimeControl): Speed {
-  const seconds = (tc.initialMs + 40 * tc.incrementMs) / 1000;
-  return seconds < 180 ? 'bullet' : seconds < 480 ? 'blitz' : seconds < 1500 ? 'rapid' : 'classical';
-}
+export { speedOf, type Speed };
 
 export interface ServerConfig {
   now: () => number;

@@ -167,6 +167,17 @@ The pairing engine is in [server/tournament/](server/tournament/). Both formats 
 
 While a puzzle rating is new and provisional ("?"), it moves a lot: a couple of hundred points per puzzle at first. The swings shrink as the uncertainty (±) comes down.
 
+## Features (Phase 9: Accounts & leaderboards)
+
+| | What it does |
+|---|---|
+| Change password | On your own profile, under **Account settings**. You need your current password. Changing it signs out your other devices, and the one you're on stays signed in. |
+| Delete account | Also under **Account settings**: enter your password and type your username. Your sign-in, sessions, ratings and puzzle history are deleted, and you're signed out. Games you played stay for your opponents, with your name shown as "[deleted]". The username becomes free again. |
+| Leaderboards | **Play online → 🏅 Leaderboard** shows the top 10 for bullet, blitz, rapid, classical and puzzles. Only established ratings are listed: not provisional and at least 2 rated games. Since uncertainty grows while a player is away, inactive players drop off by themselves. |
+| Seek rating range | Signed in, you can limit who may accept your seek: within ±100, ±200, ±300 or ±500 of your rating in that time control. The lobby shows the range, and **Play** is greyed out if yours is outside it. Automatic pairing needs both players' ranges to fit. Guests (no rating) can't take a seek with a range. |
+
+Password changes and account deletion are protected like logins: a wrong current password counts as a failed login attempt.
+
 ## Deploying
 
 The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
@@ -210,9 +221,9 @@ src/
     protocol.ts   message types shared with the server
     client.ts     the WebSocket client (reconnects and re-subscribes by itself)
     view.ts       clock countdown, replaying moves, PGN export
-  components/online/  OnlineView, Lobby, OnlineGame, Tournaments (list and create form), TournamentPage
+  components/online/  OnlineView, Lobby, OnlineGame, Tournaments (list and create form), TournamentPage, Leaderboard
   account/api.ts  calls to the account API
-  components/account/  AccountDialog (sign in / create account), ProfileView
+  components/account/  AccountDialog (sign in / create account), ProfileView, AccountSettings
   App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
 server/         the server (Node, run directly from TypeScript)
   backend.ts    opens the database and wires the API and game server together
@@ -234,6 +245,7 @@ scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a
 public/         manifest.webmanifest, icons/, sw.js (service worker for install and offline play)
 scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
 scripts/smoke-puzzles.ts  end-to-end check of puzzle ratings, the dashboard and the daily puzzle
+scripts/smoke-account-settings.ts  end-to-end check of password change, leaderboard and account deletion
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -289,7 +301,8 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Guests are per tab.** Opening a game link in a new tab as a guest makes you a spectator. Signed-in players are the same player in every tab.
 - **No chat, takebacks or extra time** in online games, and only one premove can be queued at a time.
 - **Offline play needs one visit first.** The service worker saves files as they are used, so the computer opponent works offline only after you have played it once online.
-- **Account features are minimal.** There's no password reset, email, password change, account deletion, leaderboard or rating-range filter for seeks.
+- **No password reset or email.** A forgotten password can't be recovered, because accounts have no email address. You can change your password while signed in.
+- **Deleting an account during a running game:** that game's result can't be saved afterwards, though the opponent's other games are unaffected.
 - **The PostgreSQL code path hasn't been run in this project's tests,** because no Postgres server was available. The same store tests run against it when `TEST_DATABASE_URL` points to an empty test database.
 - **Basic protection only.** The server checks messages and origins and limits connections, messages, logins and sign-ups. It has no TLS of its own (use a host or reverse proxy that provides HTTPS) and no moderation.
 - **Lag compensation is a simple model**: half the measured round trip, capped per move and by a refilling budget.

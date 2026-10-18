@@ -15,6 +15,14 @@ export const TIME_CONTROLS: readonly TimeControl[] = [
   { id: '15+10', label: '15+10 Rapid', initialMs: 900_000, incrementMs: 10_000 },
 ];
 
+export type Speed = 'bullet' | 'blitz' | 'rapid' | 'classical';
+
+/** Speed category from the estimated game length (initial time + 40 increments). */
+export function speedOf(tc: TimeControl): Speed {
+  const seconds = (tc.initialMs + 40 * tc.incrementMs) / 1000;
+  return seconds < 180 ? 'bullet' : seconds < 480 ? 'blitz' : seconds < 1500 ? 'rapid' : 'classical';
+}
+
 export function findTimeControl(id: string | null): TimeControl | null {
   return TIME_CONTROLS.find(tc => tc.id === id) ?? null;
 }

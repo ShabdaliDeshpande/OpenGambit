@@ -139,6 +139,7 @@ export default function App() {
         <OnlineView
           active={tab === 'online'}
           signedIn={!!me}
+          myRatings={me?.ratings ?? null}
           onSignIn={() => setSigningIn(true)}
           onOpenProfile={openProfile}
           onAnalyse={analyse}
@@ -156,7 +157,17 @@ export default function App() {
         />
       </div>
       {tab === 'profile' && profileName && (
-        <ProfileView key={profileName} username={profileName} meId={me?.id ?? null} onOpenProfile={openProfile} onAnalyse={analyse} />
+        <ProfileView
+          key={profileName}
+          username={profileName}
+          meId={me?.id ?? null}
+          onOpenProfile={openProfile}
+          onAnalyse={analyse}
+          onAccountDeleted={() => {
+            account.forget();
+            chooseTab('play');
+          }}
+        />
       )}
     </div>
   );

@@ -240,3 +240,13 @@ lila's Swiss pairing runs the external bbpPairings program, which isn't in the c
 - **Daily puzzle:** one per day.
 
 **Not taken over:** puzzles have their own changing ratings in lila; here they're fixed. Also left out: the puzzle streak and storm modes, replays of failed puzzles, opening-based puzzle selection, and lila's "dubious player" checks.
+
+## 11. Accounts & leaderboards (Phase 9)
+
+**Sources.** I read `modules/user/src/main/RankingApi.scala` (who appears on leaderboards) and `modules/lobby/src/main/Hook.scala` (rating ranges on seeks) in the local clone.
+
+**Behaviour taken over (as rules, not code):**
+- **Leaderboards:** only established ratings with at least 2 games count. lila requires a deviation of 75 or less. This app uses its "not provisional" line (under 110) so a small community still has a leaderboard.
+- **Seek rating ranges:** two seeks pair only if each rating fits the other's range. A seek with a range can't be taken by a guest, who has no rating.
+
+**Designed independently:** password change (signs out other sessions) and account deletion (games kept with the name replaced). lila's account closing works differently, and wasn't studied here.

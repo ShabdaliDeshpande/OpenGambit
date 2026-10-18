@@ -249,6 +249,62 @@ export class Store {
     await this.db.run('DELETE FROM sessions WHERE id_hash = ?', [hashToken(token)]);
   }
 
+  async passwordHash(userId: string): Promise<string | undefined> {
+    return (await this.db.get<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = ?', [userId]))?.password_hash;
+  }
+
+  /** Sets a new password and signs out every other session (the one in `keepToken` stays). */
+  async setPassword(userId: string, passwordHash: string, keepToken: string | null): Promise<void> {
+    await this.db.transaction(async tx => {
+      await tx.run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+      await tx.run('DELETE FROM sessions WHERE user_id = ? AND id_hash <> ?', [userId, keepToken ? hashToken(keepToken) : '']);
+    });
+  }
+
+  /**
+   * Deletes an account: sign-in, sessions, ratings and puzzle history go.
+   * Finished games stay for the opponents, with this player's name replaced.
+   */
+  async deleteUser(userId: string): Promise<void> {
+    await this.db.transaction(async tx => {
+      await tx.run("UPDATE games SET white_name = '[deleted]' WHERE white_id = ?", [userId]);
+      await tx.run("UPDATE games SET black_name = '[deleted]' WHERE black_id = ?", [userId]);
+      await tx.run("UPDATE tournaments SET created_by_name = '[deleted]' WHERE created_by = ?", [userId]);
+      await tx.run('DELETE FROM users WHERE id = ?', [userId]);
+    });
+  }
+
+  /**
+   * The top players for a speed category or 'puzzle'. Only established
+   * ratings (not provisional, at least 2 rated games) are listed.
+   */
+  async leaderboard(category: Speed | 'puzzle', limit = 10): Promise<{ username: string; rating: number; games: number }[]> {
+    const rows = await this.db.all<{ username: string; rating: number; deviation: number; volatility: number; games: number; updated_at: number }>(
+      `SELECT u.username, r.rating, r.deviation, r.volatility, r.games, r.updated_at
+       FROM ratings r JOIN users u ON u.id = r.user_id
+       WHERE r.category = ? AND r.games >= 2 ORDER BY r.rating DESC LIMIT ?`,
+      [category, limit * 5],
+    );
+    const now = this.now();
+    return rows
+      .map(r => ({
+        username: r.username,
+        games: Number(r.games),
+        glicko: currentGlicko(
+          {
+            glicko: { rating: Number(r.rating), deviation: Number(r.deviation), volatility: Number(r.volatility) },
+            games: Number(r.games),
+            updatedAt: Number(r.updated_at),
+          },
+          now,
+        ),
+      }))
+      .filter(r => !isProvisional(r.glicko))
+      .sort((a, b) => b.glicko.rating - a.glicko.rating)
+      .slice(0, limit)
+      .map(r => ({ username: r.username, rating: Math.round(r.glicko.rating), games: r.games }));
+  }
+
   async pruneSessions(): Promise<void> {
     await this.db.run('DELETE FROM sessions WHERE expires_at <= ?', [this.now()]);
   }

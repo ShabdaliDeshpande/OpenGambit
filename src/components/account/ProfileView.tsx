@@ -13,6 +13,7 @@ import {
 import { findTimeControl } from '../../chess/clock';
 import { TERMINATION_LABEL } from '../../chess/gameEnd';
 import { gamePgn } from '../../online/view';
+import { AccountSettings } from './AccountSettings';
 
 const REASON: Record<string, string> = {
   checkmate: 'checkmate',
@@ -36,9 +37,10 @@ interface Props {
   meId: string | null;
   onOpenProfile: (name: string) => void;
   onAnalyse: (pgn: string) => void;
+  onAccountDeleted: () => void;
 }
 
-export function ProfileView({ username, meId, onOpenProfile, onAnalyse }: Props) {
+export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccountDeleted }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [games, setGames] = useState<PublicGame[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +213,8 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse }: Props)
         )}
         {meId === subject.id && <p className="muted small">Games against guests are casual and saved without ratings.</p>}
       </section>
+
+      {meId === subject.id && <AccountSettings username={subject.username} onDeleted={onAccountDeleted} />}
     </main>
   );
 }

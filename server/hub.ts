@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Color } from 'chess.js';
 import { findTimeControl, type TimeControl } from '../src/chess/clock.ts';
-import type { ClientMessage, CreateTour, LobbySnapshot, SeekColor, ServerMessage, ShownRating } from '../src/online/protocol.ts';
+import { SEEK_RANGES, type ClientMessage, type CreateTour, type LobbySnapshot, type SeekColor, type ServerMessage, type ShownRating } from '../src/online/protocol.ts';
 import { speedOf, type ServerConfig } from './config.ts';
 import { GameRoom, type TournamentRules } from './room.ts';
 import { TournamentManager, type TourLimits } from './tournament/manager.ts';
@@ -16,6 +16,7 @@ interface Seek {
   tc: TimeControl;
   color: SeekColor;
   rated: boolean;
+  range: number | null;
   createdAt: number;
 }
 
@@ -54,7 +55,13 @@ function parseMessage(raw: string): ClientMessage | null {
       return isString(o.tc, 8) &&
         (o.color === 'w' || o.color === 'b' || o.color === 'random') &&
         (o.rated === undefined || typeof o.rated === 'boolean')
-        ? { t: 'seek', tc: o.tc, color: o.color, rated: o.rated === true }
+        ? {
+            t: 'seek',
+            tc: o.tc,
+            color: o.color,
+            rated: o.rated === true,
+            range: SEEK_RANGES.includes(o.range as (typeof SEEK_RANGES)[number]) ? (o.range as number) : null,
+          }
         : null;
     case 'cancelSeek':
     case 'acceptSeek':
@@ -215,7 +222,7 @@ export class Hub {
         if (msg.on) conn.send({ t: 'lobby', lobby: this.lobbySnapshot() });
         return;
       case 'seek':
-        return this.report(conn, this.seek(conn, player, msg.tc, msg.color, msg.rated));
+        return this.report(conn, this.seek(conn, player, msg.tc, msg.color, msg.rated, msg.range ?? null));
       case 'cancelSeek': {
         const seek = this.seeks.get(msg.id);
         if (seek?.owner === player) this.dropSeeks(s => s === seek);
@@ -226,6 +233,7 @@ export class Hub {
         if (!seek) return this.report(conn, 'That seek is no longer available.');
         if (seek.owner === player) return this.report(conn, 'You can’t accept your own seek.');
         if (seek.rated && !player.account) return this.report(conn, 'Sign in to play rated games.');
+        if (!this.inRange(seek, player)) return this.report(conn, 'Your rating is outside the range this player asked for.');
         const ownerColor: Color = seek.color === 'random' ? (this.cfg.random() < 0.5 ? 'w' : 'b') : seek.color;
         this.startGame(seek.tc, ownerColor === 'w' ? seek.owner : player, ownerColor === 'w' ? player : seek.owner, seek.rated);
         return;
@@ -294,6 +302,7 @@ export class Hub {
         tc: s.tc.id,
         color: s.color,
         rated: s.rated,
+        range: s.range,
         createdAt: s.createdAt,
       })),
       games: [...this.rooms.values()]
@@ -365,7 +374,15 @@ export class Hub {
         if (p.conns.size === 0 && now - p.lastSeen > this.cfg.playerTtlMs && !seated.has(p)) map.delete(key);
   }
 
-  private seek(conn: Conn, player: Player, tcId: string, color: SeekColor, rated: boolean): string | null {
+  /** Whether `player` may take `seek`: a seek with a range needs a rating within it. */
+  private inRange(seek: Seek, player: Player): boolean {
+    if (seek.range === null || !seek.owner.account) return true;
+    const mine = this.shownRating(player, seek.tc);
+    const theirs = this.shownRating(seek.owner, seek.tc);
+    return !!mine && !!theirs && Math.abs(mine.rating - theirs.rating) <= seek.range;
+  }
+
+  private seek(conn: Conn, player: Player, tcId: string, color: SeekColor, rated: boolean, range: number | null): string | null {
     const tc = findTimeControl(tcId);
     if (!tc) return 'Unknown time control.';
     if (!conn.lobby) return 'Open the lobby to create a seek.';
@@ -380,7 +397,10 @@ export class Hub {
         s.owner !== player &&
         s.tc.id === tc.id &&
         s.rated === rated &&
-        (s.color === 'random' || color === 'random' || s.color !== color),
+        (s.color === 'random' || color === 'random' || s.color !== color) &&
+        // both ranges must allow the other player
+        this.inRange(s, player) &&
+        this.inRange({ ...s, owner: player, range: player.account ? range : null }, s.owner),
     );
     if (match) {
       const ownerColor: Color =
@@ -388,7 +408,7 @@ export class Hub {
       this.startGame(tc, ownerColor === 'w' ? match.owner : player, ownerColor === 'w' ? player : match.owner, rated);
       return null;
     }
-    const seek: Seek = { id: randomId(8), owner: player, conn, tc, color, rated, createdAt: this.cfg.now() };
+    const seek: Seek = { id: randomId(8), owner: player, conn, tc, color, rated, range: player.account ? range : null, createdAt: this.cfg.now() };
     this.seeks.set(seek.id, seek);
     this.broadcastLobby();
     return null;

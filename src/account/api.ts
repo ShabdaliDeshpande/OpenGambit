@@ -122,6 +122,13 @@ export const submitPuzzleAttempt = (id: string, win: boolean, moves: { from: str
 export const fetchDailyPuzzle = () => call<{ id: string; date: string; solved: boolean }>('/api/puzzles/daily');
 export const fetchPuzzleDashboard = async () => (await call<{ dashboard: PuzzleDashboardData }>('/api/puzzles/dashboard')).dashboard;
 
+export const changePassword = (current: string, password: string) => call<{ ok: true }>('/api/account/password', { current, password });
+export const deleteAccount = (current: string, confirm: string) => call<{ user: null }>('/api/account/delete', { current, confirm });
+
+export type LeaderboardEntry = { username: string; rating: number; games: number };
+export const fetchLeaderboard = async () =>
+  (await call<{ leaderboard: Record<Category | 'puzzle', LeaderboardEntry[]> }>('/api/leaderboard')).leaderboard;
+
 /** "1734" or "1500?" while provisional. */
 export const ratingText = (r: { rating: number; provisional: boolean } | null | undefined) =>
   r ? `${r.rating}${r.provisional ? '?' : ''}` : '';

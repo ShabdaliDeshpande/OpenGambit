@@ -8,6 +8,8 @@ export interface AccountState {
   signIn: (username: string, password: string, create: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => void;
+  /** The account was deleted on the server: forget it here too. */
+  forget: () => void;
 }
 
 /** The signed-in user. Signing in or out reconnects online play under the new identity. */
@@ -34,5 +36,10 @@ export function useAccount(): AccountState {
     reconnectOnline();
   }, []);
 
-  return { me, signIn, signOut, refresh };
+  const forget = useCallback(() => {
+    setMe(null);
+    reconnectOnline();
+  }, []);
+
+  return { me, signIn, signOut, refresh, forget };
 }

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ratingText } from '../../account/api';
-import { findTimeControl, TIME_CONTROLS } from '../../chess/clock';
+import { ratingText, type Me } from '../../account/api';
+import { findTimeControl, speedOf, TIME_CONTROLS } from '../../chess/clock';
 import type { OnlineClient, OnlineState } from '../../online/client';
-import type { SeekColor } from '../../online/protocol';
+import { SEEK_RANGES, type SeekColor, type SeekInfo } from '../../online/protocol';
 
 const COLOR_LABEL: Record<SeekColor, string> = { random: 'Random', w: 'White', b: 'Black' };
 const COLOR_ICON: Record<SeekColor, string> = { random: '◐', w: '○', b: '●' };
@@ -14,14 +14,16 @@ interface Props {
   state: OnlineState;
   /** Signed in according to the account API (the socket may still be reconnecting). */
   signedIn: boolean;
+  myRatings: Me['ratings'] | null;
   onSignIn: () => void;
   onOpenProfile: (name: string) => void;
   onWatch: (game: string) => void;
 }
 
-export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatch }: Props) {
+export function Lobby({ client, state, signedIn, myRatings, onSignIn, onOpenProfile, onWatch }: Props) {
   const [color, setColor] = useState<SeekColor>('random');
   const [ratedChoice, setRatedChoice] = useState(true);
+  const [range, setRange] = useState<number | null>(null);
   const { me, lobby } = state;
   const ready = !!client && state.status === 'online';
   const registered = !!me?.registered;
@@ -29,6 +31,13 @@ export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatc
   const seeks = lobby?.seeks ?? [];
   const mine = seeks.filter(s => s.owner === me?.id);
   const error = state.error && !state.error.game ? state.error : null;
+  // a seek with a rating range only accepts players within it
+  const withinRange = (s: SeekInfo) => {
+    if (s.range === null || !s.rating) return true;
+    const tc = findTimeControl(s.tc);
+    const mine = tc && myRatings ? myRatings[speedOf(tc)] : null;
+    return !!mine && Math.abs(mine.rating - s.rating.rating) <= s.range;
+  };
 
   return (
     <main className="lobby">
@@ -57,6 +66,19 @@ export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatc
             <span>Casual</span>
           </label>
         </fieldset>
+        {registered && (
+          <label className="field range-field">
+            <span>Opponent’s rating</span>
+            <select value={range ?? ''} onChange={e => setRange(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Anyone</option>
+              {SEEK_RANGES.map(r => (
+                <option key={r} value={r}>
+                  Within ±{r} of mine
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {!signedIn && (
           <p className="muted small">
             <button type="button" className="link-button" onClick={onSignIn}>
@@ -67,7 +89,7 @@ export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatc
         )}
         <div className="tc-grid">
           {TIME_CONTROLS.map(tc => (
-            <button key={tc.id} type="button" disabled={!ready} onClick={() => client?.send({ t: 'seek', tc: tc.id, color, rated })}>
+            <button key={tc.id} type="button" disabled={!ready} onClick={() => client?.send({ t: 'seek', tc: tc.id, color, rated, range })}>
               <strong>{tc.id}</strong>
               <span>{tc.label.split(' ')[1]}</span>
             </button>
@@ -107,7 +129,8 @@ export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatc
             <tbody>
               {seeks.map(s => {
                 const own = s.owner === me?.id;
-                const canJoin = !s.rated || registered;
+                const inRange = withinRange(s);
+                const canJoin = (!s.rated || registered) && inRange;
                 return (
                   <tr key={s.id} className={own ? 'own' : ''}>
                     <td>
@@ -122,7 +145,10 @@ export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatc
                       {own && <span className="muted"> (you)</span>}
                     </td>
                     <td>{tcLabel(s.tc)}</td>
-                    <td>{s.rated ? 'Rated' : 'Casual'}</td>
+                    <td>
+                      {s.rated ? 'Rated' : 'Casual'}
+                      {s.range !== null && <span className="muted small"> ±{s.range}</span>}
+                    </td>
                     <td title={`Seeker plays ${COLOR_LABEL[s.color]}`}>{COLOR_ICON[s.color]}</td>
                     <td>
                       {own ? (
@@ -134,7 +160,7 @@ export function Lobby({ client, state, signedIn, onSignIn, onOpenProfile, onWatc
                           type="button"
                           className="primary"
                           disabled={!canJoin}
-                          title={canJoin ? undefined : 'Sign in to play rated games'}
+                          title={canJoin ? undefined : !inRange ? 'Your rating is outside this seek’s range' : 'Sign in to play rated games'}
                           onClick={() => client?.send({ t: 'acceptSeek', id: s.id })}
                         >
                           Play

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOnline } from '../../hooks/useOnline';
+import { Leaderboard } from './Leaderboard';
 import { Lobby } from './Lobby';
+import type { Me } from '../../account/api';
 import { OnlineGame } from './OnlineGame';
 import { TournamentPage } from './TournamentPage';
 import { Tournaments } from './Tournaments';
 
 const ID = /^[A-Za-z0-9]{1,16}$/;
 
-type Screen = { kind: 'lobby' } | { kind: 'tours' } | { kind: 'tour'; id: string } | { kind: 'game'; id: string };
+type Screen = { kind: 'lobby' } | { kind: 'tours' } | { kind: 'leaders' } | { kind: 'tour'; id: string } | { kind: 'game'; id: string };
 
-/** The online screen named by the address: `?game=<id>`, `?tour=<id>` or `?tours`. */
+/** The online screen named by the address: `?game=<id>`, `?tour=<id>`, `?tours` or `?leaders`. */
 function screenFromUrl(): Screen {
   const q = new URLSearchParams(window.location.search);
   const game = q.get('game');
@@ -17,6 +19,7 @@ function screenFromUrl(): Screen {
   if (game && ID.test(game)) return { kind: 'game', id: game };
   if (tour && ID.test(tour)) return { kind: 'tour', id: tour };
   if (q.has('tours')) return { kind: 'tours' };
+  if (q.has('leaders')) return { kind: 'leaders' };
   return { kind: 'lobby' };
 }
 
@@ -24,17 +27,19 @@ function screenFromUrl(): Screen {
 export const linkedOnline = (): boolean => screenFromUrl().kind !== 'lobby';
 
 const urlOf = (s: Screen) =>
-  s.kind === 'game' ? `?game=${s.id}` : s.kind === 'tour' ? `?tour=${s.id}` : s.kind === 'tours' ? '?tours' : window.location.pathname;
+  s.kind === 'game' ? `?game=${s.id}` : s.kind === 'tour' ? `?tour=${s.id}` : s.kind === 'tours' ? '?tours' : s.kind === 'leaders' ? '?leaders' : window.location.pathname;
 
 interface Props {
   active: boolean;
   signedIn: boolean;
+  /** Your game ratings, to grey out seeks whose rating range you're outside. */
+  myRatings: Me['ratings'] | null;
   onSignIn: () => void;
   onOpenProfile: (name: string) => void;
   onAnalyse: (pgn: string) => void;
 }
 
-export function OnlineView({ active, signedIn, onSignIn, onOpenProfile, onAnalyse }: Props) {
+export function OnlineView({ active, signedIn, myRatings, onSignIn, onOpenProfile, onAnalyse }: Props) {
   const [screen, setScreen] = useState<Screen>(screenFromUrl);
   const { client, state } = useOnline(active || screen.kind !== 'lobby');
   const seenStarted = useRef(0);
@@ -90,8 +95,11 @@ export function OnlineView({ active, signedIn, onSignIn, onOpenProfile, onAnalys
           <button type="button" className={screen.kind === 'lobby' ? 'on' : ''} onClick={() => go({ kind: 'lobby' })}>
             Lobby
           </button>
-          <button type="button" className={screen.kind === 'lobby' ? '' : 'on'} onClick={() => go({ kind: 'tours' })}>
+          <button type="button" className={screen.kind === 'tours' || screen.kind === 'tour' ? 'on' : ''} onClick={() => go({ kind: 'tours' })}>
             🏆 Tournaments
+          </button>
+          <button type="button" className={screen.kind === 'leaders' ? 'on' : ''} onClick={() => go({ kind: 'leaders' })}>
+            🏅 Leaderboard
           </button>
         </nav>
       )}
@@ -119,10 +127,20 @@ export function OnlineView({ active, signedIn, onSignIn, onOpenProfile, onAnalys
           onOpenGame={openGame}
           onOpenProfile={onOpenProfile}
         />
+      ) : screen.kind === 'leaders' ? (
+        <Leaderboard onOpenProfile={onOpenProfile} />
       ) : screen.kind === 'tours' ? (
         <Tournaments client={client} state={state} signedIn={signedIn} onSignIn={onSignIn} onOpen={openTour} />
       ) : (
-        <Lobby client={client} state={state} signedIn={signedIn} onSignIn={onSignIn} onOpenProfile={onOpenProfile} onWatch={openGame} />
+        <Lobby
+          client={client}
+          state={state}
+          signedIn={signedIn}
+          myRatings={myRatings}
+          onSignIn={onSignIn}
+          onOpenProfile={onOpenProfile}
+          onWatch={openGame}
+        />
       )}
     </>
   );

@@ -25,8 +25,13 @@ export interface SeekInfo {
   tc: string;
   color: SeekColor;
   rated: boolean;
+  /** Only players within this many points of the seeker's rating may accept (null = anyone). */
+  range: number | null;
   createdAt: number;
 }
+
+/** Rating ranges a seek can have (± points). */
+export const SEEK_RANGES = [100, 200, 300, 500] as const;
 
 export interface GameSummary {
   id: string;
@@ -185,7 +190,7 @@ export type ClientMessage =
   | { t: 'hello'; token?: string }
   | { t: 'pong'; s: number }
   | { t: 'lobby'; on: boolean }
-  | { t: 'seek'; tc: string; color: SeekColor; rated: boolean }
+  | { t: 'seek'; tc: string; color: SeekColor; rated: boolean; range?: number | null }
   | { t: 'cancelSeek'; id: string }
   | { t: 'acceptSeek'; id: string }
   | { t: 'watch'; game: string }

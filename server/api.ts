@@ -209,6 +209,31 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         });
       }
 
+      if (path === '/api/account/password' || path === '/api/account/delete') {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in first.');
+        const body = await readJson(req);
+        const key = `user:${user.username.toLowerCase()}`;
+        if (logins.blocked(key) || loginsByIp.blocked(ip)) throw new HttpError(429, 'Too many failed attempts. Try again in 15 minutes.');
+        const current = typeof body.current === 'string' ? body.current : '';
+        if (!(await verifyPassword(current, (await store.passwordHash(user.id)) ?? (await dummyHash())))) {
+          logins.fail(key);
+          loginsByIp.fail(ip);
+          throw new HttpError(403, 'Your current password is wrong.');
+        }
+        const token = readCookie(req.headers.cookie, SESSION_COOKIE) ?? null;
+        if (path === '/api/account/password') {
+          const problem = checkPassword(body.password, user.username);
+          if (problem) throw new HttpError(400, problem);
+          if (body.password === current) throw new HttpError(400, 'Choose a password different from the current one.');
+          await store.setPassword(user.id, await hashPassword(body.password as string), token);
+          return send(res, 200, { ok: true });
+        }
+        if (body.confirm !== user.username) throw new HttpError(400, 'Type your username to confirm.');
+        await store.deleteUser(user.id);
+        return send(res, 200, { user: null }, { 'set-cookie': clearedSessionCookie(isHttps(req, trustProxy)) });
+      }
+
       if (path === '/api/logout') {
         const token = readCookie(req.headers.cookie, SESSION_COOKIE);
         if (token) await store.deleteSession(token);
@@ -252,6 +277,13 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         totalGames: await store.countGames(user.id),
         games,
       });
+    }
+
+    if (path === '/api/leaderboard') {
+      const boards = Object.fromEntries(
+        await Promise.all([...CATEGORIES, 'puzzle' as const].map(async c => [c, await store.leaderboard(c, 10)] as const)),
+      );
+      return send(res, 200, { leaderboard: boards });
     }
 
     if (path === '/api/tournaments') return send(res, 200, { tournaments: await store.recentTournaments(30) });

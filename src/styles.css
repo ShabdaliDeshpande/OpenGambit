@@ -1617,3 +1617,73 @@ button.daily-button {
     display: none;
   }
 }
+
+/* ---------- account settings and leaderboard ---------- */
+
+.account-settings .settings-form {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  padding: 10px 0 16px;
+}
+
+.account-settings h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.danger-zone {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.danger-zone h3 {
+  color: var(--danger);
+}
+
+.success {
+  margin: 0;
+  color: #2e9d5b;
+}
+
+.leader-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.leader-list li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.leader-list .rank {
+  text-align: center;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.leader-list .rating {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.leader-list button.link-button {
+  justify-self: start;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.leader-note {
+  grid-column: 1 / -1;
+}
+
+.range-field {
+  margin-bottom: 8px;
+}
