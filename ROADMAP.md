@@ -48,3 +48,11 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Premoves: queue a move during the opponent's turn, played the moment it becomes yours if it's still legal.
 - Rematch button after online games: offer, accept or decline, with colours swapped.
 - Installable app (PWA): manifest, original icons, and offline play vs the computer, puzzles and analysis.
+
+## Phase 8: Puzzle ratings & training (done)
+- A Glicko-2 puzzle rating for signed-in players. Only the first try at each puzzle counts, and a hint, a wrong move or showing the solution counts as a miss.
+- The server checks each solved claim against the real solution before it changes a rating.
+- Difficulty relative to your rating (easiest −600 … hardest +600), so puzzles are picked near your level.
+- A daily puzzle that's the same for everyone each day.
+- A puzzle dashboard: rating chart, totals, strengths and areas to improve by theme, and recent history with replay.
+- The puzzle rating appears on profiles.

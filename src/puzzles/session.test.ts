@@ -102,6 +102,33 @@ describe('puzzle picking and stats', () => {
   });
 });
 
+describe('puzzle ratings support', () => {
+  it('records the moves played, for the server to check', () => {
+    const s = run(
+      mateIn2,
+      { type: 'move', move: { from: 'b2', to: 'b8' } },
+      { type: 'opponentMove' },
+      { type: 'move', move: { from: 'b1', to: 'b8' } },
+    );
+    expect(s.phase).toBe('solved');
+    expect(s.played).toEqual([
+      { from: 'b2', to: 'b8' },
+      { from: 'a8', to: 'b8' },
+      { from: 'b1', to: 'b8' },
+    ]);
+  });
+
+  it('picks puzzles near a target rating', () => {
+    const list = [800, 1200, 1500, 1520, 1550, 1600, 1650, 2200].map((rating, i): Puzzle => ({ ...mateIn2, id: `r${i}`, rating }));
+    for (let k = 0; k < 20; k++) {
+      const p = pickPuzzle(list, { theme: '', difficulty: 'any', target: 1550 }, EMPTY_STATS, null, () => k / 20)!;
+      expect(Math.abs(p.rating - 1550)).toBeLessThanOrEqual(100);
+    }
+    const hard = pickPuzzle(list, { theme: '', difficulty: 'any', target: 2150 }, EMPTY_STATS, null, () => 0)!;
+    expect(hard.rating).toBe(2200);
+  });
+});
+
 describe('puzzle CSV rows', () => {
   it('parses the common column layout, treating the first move as the setup', () => {
     const p = parseCsvRow('00abc,r5k1/5ppp/8/8/8/8/1Q6/1R4K1 b - - 0 1,g8h8 b2b8 a8b8 b1b8,1532,75,95,1200,backRankMate mateIn2,https://example.test/x,')!;

@@ -85,6 +85,19 @@ export const MIGRATIONS: string[] = [
     standings TEXT NOT NULL
   );
   CREATE INDEX tournaments_finished ON tournaments(finished_at);`,
+  `CREATE TABLE puzzle_attempts (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    puzzle_id TEXT NOT NULL,
+    first INTEGER NOT NULL,
+    win INTEGER NOT NULL,
+    puzzle_rating INTEGER NOT NULL,
+    themes TEXT NOT NULL,
+    rating_after INTEGER,
+    rating_diff INTEGER,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX puzzle_attempts_user ON puzzle_attempts(user_id, created_at);
+  CREATE INDEX puzzle_attempts_puzzle ON puzzle_attempts(user_id, puzzle_id);`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

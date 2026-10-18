@@ -139,6 +139,15 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse }: Props)
               </div>
             );
           })}
+          {profile.puzzleRating && (
+            <div className="rating-card puzzle">
+              <span className="stat-label">🧩 Puzzles</span>
+              <span className="stat-value" title={profile.puzzleRating.provisional ? 'Provisional: not enough rated puzzles yet' : undefined}>
+                {ratingText(profile.puzzleRating)}
+              </span>
+              <span className="muted small">±{profile.puzzleRating.deviation}</span>
+            </div>
+          )}
         </div>
         <p className="muted small">
           Ratings use Glicko-2. A “?” means the rating is still provisional: its uncertainty (±) is 110 or more.

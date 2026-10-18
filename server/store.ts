@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Speed } from './config.ts';
 import type { Db, Queryable } from './db/db.ts';
-import { afterIdle, DEFAULT_GLICKO, isProvisional, rateGame, type Glicko, type Score } from './rating/glicko2.ts';
+import { afterIdle, capped, DEFAULT_GLICKO, isProvisional, rateGame, ratePeriod, type Glicko, type Score } from './rating/glicko2.ts';
 
 export const CATEGORIES: readonly Speed[] = ['bullet', 'blitz', 'rapid', 'classical'];
 
@@ -102,6 +102,27 @@ const toGame = (r: GameRow): StoredGame => ({
   endedAt: Number(r.ended_at),
   tournamentId: r.tournament_id ?? null,
 });
+
+/** Puzzles are treated as fixed-strength opponents with this rating deviation. */
+export const PUZZLE_DEVIATION = 80;
+
+export interface PuzzleResult {
+  /** False when the player had tried this puzzle before (not rated). */
+  first: boolean;
+  rating: Glicko;
+  diff: number | null;
+}
+
+export interface PuzzleAttempt {
+  puzzleId: string;
+  first: boolean;
+  win: boolean;
+  puzzleRating: number;
+  themes: string[];
+  ratingAfter: number | null;
+  ratingDiff: number | null;
+  createdAt: number;
+}
 
 export interface TournamentRecord {
   id: string;
@@ -241,7 +262,8 @@ export class Store {
       CATEGORIES.map(c => [c, { glicko: { ...DEFAULT_GLICKO }, games: 0, updatedAt: 0 } satisfies RatingInfo]),
     ) as Ratings;
     for (const r of rows)
-      result[r.category] = {
+      if (CATEGORIES.includes(r.category))
+        result[r.category] = {
         glicko: { rating: Number(r.rating), deviation: Number(r.deviation), volatility: Number(r.volatility) },
         games: Number(r.games),
         updatedAt: Number(r.updated_at),
@@ -357,6 +379,79 @@ export class Store {
       const { standings: _, ...rest } = toTournament(r);
       return rest;
     });
+  }
+
+  /** The puzzle rating (its own Glicko-2 pool, stored as category 'puzzle'). */
+  async puzzleRating(userId: string, q: Queryable = this.db): Promise<RatingInfo> {
+    const r = await q.get<{ rating: number; deviation: number; volatility: number; games: number; updated_at: number }>(
+      "SELECT rating, deviation, volatility, games, updated_at FROM ratings WHERE user_id = ? AND category = 'puzzle'",
+      [userId],
+    );
+    return r
+      ? { glicko: { rating: Number(r.rating), deviation: Number(r.deviation), volatility: Number(r.volatility) }, games: Number(r.games), updatedAt: Number(r.updated_at) }
+      : { glicko: { ...DEFAULT_GLICKO }, games: 0, updatedAt: 0 };
+  }
+
+  /**
+   * Records a puzzle attempt. Only a player's first attempt at a puzzle is
+   * rated: Glicko-2 against the puzzle's own rating, as one game.
+   */
+  async recordPuzzle(
+    userId: string,
+    puzzle: { id: string; rating: number; themes: string[] },
+    win: boolean,
+    /** 0..1: how much of the full rating change applies (less when training a theme that hints at the answer). */
+    weight = 1,
+  ): Promise<PuzzleResult> {
+    return this.db.transaction(async tx => {
+      const now = this.now();
+      const seen = await tx.get('SELECT 1 AS x FROM puzzle_attempts WHERE user_id = ? AND puzzle_id = ?', [userId, puzzle.id]);
+      const info = await this.puzzleRating(userId, tx);
+      const before = currentGlicko(info, now);
+      let after = before;
+      if (!seen) {
+        const full = capped(ratePeriod(before, [{ opponent: { rating: puzzle.rating, deviation: PUZZLE_DEVIATION, volatility: 0.06 }, score: win ? 1 : 0 }]), before);
+        const mix = (a: number, b: number) => a + (b - a) * Math.max(0, Math.min(1, weight));
+        after = { rating: mix(before.rating, full.rating), deviation: mix(before.deviation, full.deviation), volatility: mix(before.volatility, full.volatility) };
+        await tx.run(
+          `INSERT INTO ratings (user_id, category, rating, deviation, volatility, games, updated_at) VALUES (?, 'puzzle', ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, category) DO UPDATE SET rating = excluded.rating, deviation = excluded.deviation,
+             volatility = excluded.volatility, games = excluded.games, updated_at = excluded.updated_at`,
+          [userId, after.rating, after.deviation, after.volatility, info.games + 1, now],
+        );
+      }
+      const diff = seen ? null : Math.round(after.rating) - Math.round(before.rating);
+      await tx.run(
+        `INSERT INTO puzzle_attempts (user_id, puzzle_id, first, win, puzzle_rating, themes, rating_after, rating_diff, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, puzzle.id, seen ? 0 : 1, win ? 1 : 0, puzzle.rating, puzzle.themes.join(' '), seen ? null : Math.round(after.rating), diff, now],
+      );
+      return { first: !seen, rating: after, diff };
+    });
+  }
+
+  /** A player's puzzle attempts, newest first. */
+  async puzzleAttempts(userId: string, limit = 3000): Promise<PuzzleAttempt[]> {
+    const rows = await this.db.all<{
+      puzzle_id: string;
+      first: number;
+      win: number;
+      puzzle_rating: number;
+      themes: string;
+      rating_after: number | null;
+      rating_diff: number | null;
+      created_at: number;
+    }>('SELECT * FROM puzzle_attempts WHERE user_id = ? ORDER BY created_at DESC LIMIT ?', [userId, limit]);
+    return rows.map(r => ({
+      puzzleId: r.puzzle_id,
+      first: Number(r.first) === 1,
+      win: Number(r.win) === 1,
+      puzzleRating: Number(r.puzzle_rating),
+      themes: r.themes ? r.themes.split(' ') : [],
+      ratingAfter: r.rating_after === null ? null : Number(r.rating_after),
+      ratingDiff: r.rating_diff === null ? null : Number(r.rating_diff),
+      createdAt: Number(r.created_at),
+    }));
   }
 
   async countGames(userId: string): Promise<number> {

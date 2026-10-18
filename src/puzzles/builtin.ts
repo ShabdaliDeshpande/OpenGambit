@@ -1,5 +1,5 @@
-import { parseUci } from './csv';
-import type { Puzzle } from './types';
+import { parseUci } from './csv.ts';
+import type { Puzzle } from './types.ts';
 
 /**
  * Original puzzles: positions composed from standard mating patterns or taken

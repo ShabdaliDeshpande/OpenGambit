@@ -14,6 +14,9 @@ import {
 } from './auth.ts';
 import { CATEGORIES, currentGlicko, displayRating, SESSION_TTL_MS, type Ratings, type StoredGame, type Store, type User } from './store.ts';
 import { clientIp, sameOrigin } from './transport.ts';
+import { buildDashboard } from './puzzleDashboard.ts';
+import { PuzzleCatalogue, solves, themeWeight } from './puzzles.ts';
+import type { UciMove } from '../src/puzzles/types.ts';
 import type { Account } from './types.ts';
 
 export interface ApiOptions {
@@ -23,6 +26,10 @@ export interface ApiOptions {
   maxLoginFailures?: number;
   /** New accounts allowed per address per hour. */
   maxSignupsPerHour?: number;
+  /** Puzzles the server can rate; defaults to the built-in set plus any imported file. */
+  puzzles?: PuzzleCatalogue;
+  /** Puzzle attempts allowed per player per 10 minutes. */
+  maxPuzzleAttempts?: number;
 }
 
 const MAX_BODY = 4096;
@@ -115,6 +122,13 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   // one address may be a whole school or office behind NAT, so it gets more room
   const loginsByIp = new LoginLimiter(maxFailures * 3, 15 * 60_000, now);
   const signups = new LoginLimiter(options.maxSignupsPerHour ?? 5, 60 * 60_000, now);
+  const puzzles = options.puzzles ?? PuzzleCatalogue.load();
+  const puzzleAttempts = new LoginLimiter(options.maxPuzzleAttempts ?? 120, 10 * 60_000, now);
+
+  const puzzleRatingOf = async (userId: string) => {
+    const g = currentGlicko(await store.puzzleRating(userId), now());
+    return { ...displayRating(g), deviation: Math.round(g.deviation) };
+  };
 
   const currentUser = async (req: IncomingMessage): Promise<User | undefined> => {
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
@@ -122,7 +136,14 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   };
 
   const me = async (user: User | undefined) =>
-    user ? { id: user.id, username: user.username, ratings: publicRatings(await store.ratings(user.id), now()) } : null;
+    user
+      ? {
+          id: user.id,
+          username: user.username,
+          ratings: publicRatings(await store.ratings(user.id), now()),
+          puzzleRating: await puzzleRatingOf(user.id),
+        }
+      : null;
 
   const startSession = async (req: IncomingMessage, res: ServerResponse, user: User) => {
     const token = await store.createSession(user.id);
@@ -166,6 +187,28 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         return startSession(req, res, found.user);
       }
 
+      if (path === '/api/puzzles/attempt') {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in to get a puzzle rating.');
+        const body = await readJson(req);
+        const puzzle = typeof body.id === 'string' ? puzzles.get(body.id) : undefined;
+        if (!puzzle) throw new HttpError(404, 'No such puzzle.');
+        if (typeof body.win !== 'boolean') throw new HttpError(400, 'Say whether the puzzle was solved.');
+        if (puzzleAttempts.blocked(user.id)) throw new HttpError(429, 'That’s a lot of puzzles! Take a short break.');
+        // a solve must come with the moves, and they must be the solution
+        if (body.win && !(Array.isArray(body.moves) && body.moves.length <= 40 && solves(puzzle, body.moves as UciMove[])))
+          throw new HttpError(400, 'Those moves don’t solve the puzzle.');
+        puzzleAttempts.fail(user.id);
+        // training one theme counts for less, as lila does; the theme must be one the puzzle has
+        const theme = typeof body.theme === 'string' && puzzle.themes.includes(body.theme) ? body.theme : null;
+        const result = await store.recordPuzzle(user.id, puzzle, body.win, themeWeight(theme, body.win));
+        return send(res, 200, {
+          first: result.first,
+          diff: result.diff,
+          rating: { ...displayRating(result.rating), deviation: Math.round(result.rating.deviation) },
+        });
+      }
+
       if (path === '/api/logout') {
         const token = readCookie(req.headers.cookie, SESSION_COOKIE);
         if (token) await store.deleteSession(token);
@@ -177,6 +220,21 @@ export function createApi(store: Store, options: ApiOptions = {}) {
     if (method !== 'GET') throw new HttpError(405, 'Method not allowed.');
 
     if (path === '/api/me') return send(res, 200, { user: await me(await currentUser(req)) });
+
+    if (path === '/api/puzzles/daily') {
+      const daily = puzzles.daily(now());
+      const user = await currentUser(req);
+      const today = Math.floor(now() / 86_400_000) * 86_400_000;
+      const solved = user ? (await store.puzzleAttempts(user.id, 200)).some(a => a.puzzleId === daily.id && a.win && a.createdAt >= today) : false;
+      return send(res, 200, { id: daily.id, date: new Date(today).toISOString().slice(0, 10), solved });
+    }
+
+    if (path === '/api/puzzles/dashboard') {
+      const user = await currentUser(req);
+      if (!user) throw new HttpError(401, 'Sign in to see your puzzle dashboard.');
+      const rating = currentGlicko(await store.puzzleRating(user.id), now());
+      return send(res, 200, { dashboard: buildDashboard(await store.puzzleAttempts(user.id), rating) });
+    }
 
     const profile = /^\/api\/users\/([^/]+)$/.exec(path);
     const history = /^\/api\/users\/([^/]+)\/games$/.exec(path);
@@ -190,6 +248,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       return send(res, 200, {
         user: { id: user.id, username: user.username, createdAt: user.createdAt },
         ratings: publicRatings(await store.ratings(user.id), now()),
+        puzzleRating: await puzzleRatingOf(user.id),
         totalGames: await store.countGames(user.id),
         games,
       });

@@ -1498,3 +1498,122 @@ button.berserk {
 .board.premoving .sq.selected::before {
   background: rgba(214, 120, 40, 0.5);
 }
+
+/* ---------- puzzle ratings and dashboard ---------- */
+
+.puzzle-views {
+  margin-bottom: 2px;
+}
+
+.puzzle-rating {
+  margin: 0 0 10px;
+}
+
+.puzzle-rating .stat-value {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.puzzle-rating-change {
+  margin: 10px 0 0;
+  font-weight: 600;
+}
+
+button.daily-button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.puzzle-dash-page {
+  max-width: 900px;
+}
+
+.puzzle-dash-page .segmented {
+  max-width: 320px;
+  margin-bottom: 14px;
+}
+
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rating-chart {
+  display: block;
+  width: 100%;
+  height: 160px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.rating-chart .line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.rating-chart .area {
+  fill: var(--accent);
+  opacity: 0.12;
+}
+
+.rating-chart .label {
+  font-size: 12px;
+  fill: var(--muted);
+}
+
+.dash-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.dash-columns h3,
+.puzzle-dash-page h3 {
+  margin: 10px 0 6px;
+  font-size: 16px;
+}
+
+.theme-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.theme-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-table td.num {
+  text-align: right;
+  font-weight: 700;
+}
+
+.puzzle-history {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.puzzle-history li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .puzzle-history li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .puzzle-history li > .muted {
+    display: none;
+  }
+}

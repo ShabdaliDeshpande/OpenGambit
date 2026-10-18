@@ -14,10 +14,18 @@ export interface PublicRating {
   games: number;
 }
 
+/** A rating without a game count (the puzzle rating). */
+export interface ShownRatingWithDeviation {
+  rating: number;
+  provisional: boolean;
+  deviation: number;
+}
+
 export interface Me {
   id: string;
   username: string;
   ratings: Record<Category, PublicRating>;
+  puzzleRating: ShownRatingWithDeviation;
 }
 
 export interface GameSide {
@@ -45,6 +53,7 @@ export interface PublicGame {
 export interface Profile {
   user: { id: string; username: string; createdAt: number };
   ratings: Record<Category, PublicRating>;
+  puzzleRating: ShownRatingWithDeviation;
   totalGames: number;
   games: PublicGame[];
 }
@@ -79,6 +88,39 @@ export const fetchProfile = (name: string) => call<Profile>(`/api/users/${encode
 export const fetchGames = async (name: string, before: number) =>
   (await call<{ games: PublicGame[] }>(`/api/users/${encodeURIComponent(name)}/games?before=${before}`)).games;
 export const fetchGame = async (id: string) => (await call<{ game: PublicGame }>(`/api/games/${encodeURIComponent(id)}`)).game;
+
+export interface PuzzleResult {
+  /** False when you had tried this puzzle before: practice, not rated. */
+  first: boolean;
+  diff: number | null;
+  rating: ShownRatingWithDeviation;
+}
+
+export interface ThemeStat {
+  theme: string;
+  played: number;
+  firstWins: number;
+  performance: number;
+}
+
+export interface PuzzleDashboardData {
+  rating: ShownRatingWithDeviation;
+  played: number;
+  firstWins: number;
+  successRate: number;
+  streak: number;
+  performance: number | null;
+  strengths: ThemeStat[];
+  improvements: ThemeStat[];
+  themes: ThemeStat[];
+  chart: { at: number; rating: number }[];
+  history: { puzzleId: string; win: boolean; first: boolean; puzzleRating: number; themes: string[]; ratingDiff: number | null; at: number }[];
+}
+
+export const submitPuzzleAttempt = (id: string, win: boolean, moves: { from: string; to: string; promotion?: string }[], theme: string) =>
+  call<PuzzleResult>('/api/puzzles/attempt', { id, win, moves, ...(theme ? { theme } : {}) });
+export const fetchDailyPuzzle = () => call<{ id: string; date: string; solved: boolean }>('/api/puzzles/daily');
+export const fetchPuzzleDashboard = async () => (await call<{ dashboard: PuzzleDashboardData }>('/api/puzzles/dashboard')).dashboard;
 
 /** "1734" or "1500?" while provisional. */
 export const ratingText = (r: { rating: number; provisional: boolean } | null | undefined) =>

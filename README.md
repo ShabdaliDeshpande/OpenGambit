@@ -154,6 +154,19 @@ The pairing engine is in [server/tournament/](server/tournament/). Both formats 
 | Rematch | After an online game, **↻ Rematch** offers a new game with the same time control and colours swapped. The opponent can accept or decline, and you can withdraw the offer. Tournament games have no rematch. |
 | Install as an app | OpenGambit has a web app manifest, its own icon and a service worker, so browsers offer **Install**. Once installed or visited, playing the computer, puzzles and the analysis board work offline. Online play needs a connection. The service worker is only active in production builds (`npm run build`), never in `npm run dev`. |
 
+## Features (Phase 8: Puzzle ratings & training)
+
+| | What it does |
+|---|---|
+| Puzzle rating | Signed-in players get a Glicko-2 puzzle rating, kept separate from game ratings. Only your **first try** at each puzzle counts; later tries are practice. A wrong move, a hint or showing the solution counts as a miss. The new rating and its change appear right after each puzzle, and on your profile. |
+| Honest solves | The browser sends the moves you played, and the server checks them against the real solution (any checkmate counts on the last move) before it changes your rating. |
+| Theme training | When you train one theme, a result counts for less because the theme hints at the answer: 10% for a solved mate (40% missed), 20% (70%) for tactics like forks, 70% (80%) for endgames. "Any theme" counts fully. |
+| Difficulty | Signed in, difficulty is relative to your rating: Easiest −600, Easier −300, Normal, Harder +300, Hardest +600. Puzzles are picked from the nearest ones you haven't tried. Guests keep the fixed Easy, Medium and Hard ranges. |
+| Daily puzzle | **📅 Daily puzzle** is the same for everyone each day (UTC) and cycles through the whole built-in set. It shows ✓ once you've solved today's. |
+| Dashboard | **📈 Dashboard** shows your rating chart, the number of rated puzzles, your first-try success rate and performance. **Strengths** are themes with 3+ first-try wins above your average; **improvement areas** are themes with 3+ misses below it. It also lists your recent puzzles with **↻ Replay**. A theme's performance is its average puzzle rating − 500 + 1000 × your first-try success rate. |
+
+While a puzzle rating is new and provisional ("?"), it moves a lot: a couple of hundred points per puzzle at first. The swings shrink as the uncertainty (±) comes down.
+
 ## Deploying
 
 The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
@@ -210,6 +223,8 @@ server/         the server (Node, run directly from TypeScript)
   auth.ts       password hashing, input checks, cookies, login rate limits
   store.ts      users, sessions, ratings and games on top of the database
   rating/glicko2.ts  the Glicko-2 rating system
+  puzzles.ts    puzzle catalogue for the server, solve checking, daily puzzle, theme weights
+  puzzleDashboard.ts  dashboard statistics (strengths, improvement areas, chart, history)
   tournament/   manager.ts (lifecycle, timers, live pages), arena.ts (scoring, pairing),
                 swiss.ts (pairing, byes, tie-breaks), matching.ts (minimum-cost matching)
   db/           one interface over SQLite (node:sqlite) and PostgreSQL (pg), plus migrations
@@ -218,6 +233,7 @@ server/         the server (Node, run directly from TypeScript)
 scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a running server
 public/         manifest.webmanifest, icons/, sw.js (service worker for install and offline play)
 scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
+scripts/smoke-puzzles.ts  end-to-end check of puzzle ratings, the dashboard and the daily puzzle
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.

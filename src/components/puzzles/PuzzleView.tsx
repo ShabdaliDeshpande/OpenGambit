@@ -11,6 +11,7 @@ import {
   matches,
   pickPuzzle,
   recordResult,
+  RELATIVE_DIFFICULTY,
   themeCounts,
   themeLabel,
   type Difficulty,
@@ -20,6 +21,8 @@ import {
 import { sessionReducer, startSession } from '../../puzzles/session';
 import type { Puzzle } from '../../puzzles/types';
 import { useKeyboardNav } from '../../hooks/useKeyboardNav';
+import { diffText, fetchDailyPuzzle, ratingText, submitPuzzleAttempt, type Me, type PuzzleResult } from '../../account/api';
+import { PuzzleDashboard } from './PuzzleDashboard';
 
 const STATS_KEY = 'chess-app:puzzle-stats';
 const IMPORTED_URL = '/puzzles/imported.json';
@@ -61,9 +64,21 @@ const colorName = (c: 'w' | 'b') => (c === 'w' ? 'White' : 'Black');
 interface Props {
   active: boolean;
   onAnalyse: (pgn: string) => void;
+  /** The signed-in player, for the puzzle rating; null for guests. */
+  me: Me | null;
+  /** Called after a rated attempt so the account (and its puzzle rating) can refresh. */
+  onRated: () => void;
+  onSignIn: () => void;
 }
 
-export function PuzzleView({ active, onAnalyse }: Props) {
+export function PuzzleView({ active, onAnalyse, me, onRated, onSignIn }: Props) {
+  const [view, setView] = useState<'train' | 'dashboard'>('train');
+  // signed in: difficulty is an offset from your puzzle rating
+  const [offset, setOffset] = useState(0);
+  const [result, setResult] = useState<{ attempt: number; value: PuzzleResult | null; error: string | null } | null>(null);
+  const [dashVersion, setDashVersion] = useState(0);
+  const [daily, setDaily] = useState<{ id: string; solved: boolean } | null>(null);
+  const reported = useRef<number | null>(null);
   const [imported, setImported] = useState<Puzzle[]>([]);
   const [source, setSource] = useState<Source>('all');
   const [filter, setFilter] = useState<PuzzleFilter>({ theme: '', difficulty: 'any' });
@@ -98,15 +113,55 @@ export function PuzzleView({ active, onAnalyse }: Props) {
     [source, imported],
   );
   const themes = useMemo(() => themeCounts(all), [all]);
-  const available = useMemo(() => all.filter(p => matches(p, filter)).length, [all, filter]);
+  const myRating = me?.puzzleRating.rating ?? null;
+  // the filter actually used for picking: near your rating when signed in
+  const pickFilter = useMemo<PuzzleFilter>(
+    () => (myRating !== null ? { theme: filter.theme, difficulty: 'any', target: myRating + offset } : filter),
+    [filter, myRating, offset],
+  );
+  const available = useMemo(() => all.filter(p => matches(p, pickFilter)).length, [all, pickFilter]);
 
   const next = useCallback(
-    (f: PuzzleFilter = filter, pool: Puzzle[] = all) => {
+    (f: PuzzleFilter = pickFilter, pool: Puzzle[] = all) => {
       const p = pickPuzzle(pool, f, stats, session.puzzle.id);
       if (p) dispatch({ type: 'start', puzzle: p });
     },
-    [filter, all, stats, session.puzzle.id],
+    [pickFilter, all, stats, session.puzzle.id],
   );
+
+  const startById = useCallback(
+    (id: string) => {
+      const p = [...BUILTIN_PUZZLES, ...imported].find(x => x.id === id);
+      if (p) dispatch({ type: 'start', puzzle: p });
+      setView('train');
+    },
+    [imported],
+  );
+
+  useEffect(() => {
+    fetchDailyPuzzle()
+      .then(d => setDaily({ id: d.id, solved: d.solved }))
+      .catch(() => undefined);
+  }, [me?.id]);
+
+  // signed in: report each attempt once — a miss as soon as it happens, a solve with its moves
+  useEffect(() => {
+    if (!me || reported.current === session.attempt) return;
+    const missed = session.failed;
+    const solved = session.phase === 'solved' && !session.failed;
+    if (!missed && !solved) return;
+    reported.current = session.attempt;
+    const attempt = session.attempt;
+    submitPuzzleAttempt(session.puzzle.id, solved, solved ? session.played : [], filter.theme)
+      .then(value => {
+        setResult({ attempt, value, error: null });
+        setDashVersion(v => v + 1);
+        if (solved && daily?.id === session.puzzle.id) setDaily(d => (d ? { ...d, solved: true } : d));
+        onRated();
+      })
+      .catch((e: Error) => setResult({ attempt, value: null, error: e.message }));
+  }, [me, session.attempt, session.failed, session.phase, session.puzzle.id, session.played, daily?.id, onRated, filter.theme]);
+  const shownResult = result && result.attempt === session.attempt ? result : null;
 
   // play the setup move, opponent replies and revealed moves with a short delay
   useEffect(() => {
@@ -147,7 +202,7 @@ export function PuzzleView({ active, onAnalyse }: Props) {
 
   const changeFilter = (f: PuzzleFilter) => {
     setFilter(f);
-    next(f);
+    next(myRating !== null ? { ...f, difficulty: 'any', target: myRating + offset } : f);
   };
 
   const changeSource = (s: Source) => {
@@ -155,7 +210,12 @@ export function PuzzleView({ active, onAnalyse }: Props) {
     const pool = s === 'builtin' ? BUILTIN_PUZZLES : s === 'imported' ? imported : [...BUILTIN_PUZZLES, ...imported];
     const f = { theme: '', difficulty: filter.difficulty };
     setFilter(f);
-    next(f, pool);
+    next(myRating !== null ? { ...f, difficulty: 'any', target: myRating + offset } : f, pool);
+  };
+
+  const changeOffset = (o: number) => {
+    setOffset(o);
+    if (myRating !== null) next({ theme: filter.theme, difficulty: 'any', target: myRating + o });
   };
 
   const analyse = () => {
@@ -184,6 +244,34 @@ export function PuzzleView({ active, onAnalyse }: Props) {
                 ? 'Puzzle complete (with help).'
                 : 'Solved!';
 
+  const viewSwitch = (
+    <div className="segmented puzzle-views" role="radiogroup" aria-label="Puzzle screen">
+      <button type="button" role="radio" aria-checked={view === 'train'} className={view === 'train' ? 'on' : ''} onClick={() => setView('train')}>
+        🧩 Train
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={view === 'dashboard'}
+        className={view === 'dashboard' ? 'on' : ''}
+        onClick={() => (me ? setView('dashboard') : onSignIn())}
+        title={me ? 'Your puzzle statistics' : 'Sign in to see your puzzle dashboard'}
+      >
+        📈 Dashboard
+      </button>
+    </div>
+  );
+
+  if (view === 'dashboard' && me)
+    return (
+      <main className="puzzle-dash-page">
+        <section className="panel">
+          {viewSwitch}
+          <PuzzleDashboard version={dashVersion} onReplay={startById} />
+        </section>
+      </main>
+    );
+
   return (
     <main className="layout puzzles">
       <div className="board-wrap">
@@ -198,6 +286,7 @@ export function PuzzleView({ active, onAnalyse }: Props) {
       </div>
 
       <aside className="side">
+        {viewSwitch}
         <section className={`panel puzzle-status ${phase}`} aria-live="polite">
           <p className="puzzle-message">{status}</p>
           <div className="row">
@@ -244,10 +333,37 @@ export function PuzzleView({ active, onAnalyse }: Props) {
               <dd>{puzzle.source === 'builtin' ? 'Built-in' : 'Imported'}</dd>
             </div>
           </dl>
+          {me && shownResult && (
+            <p className="puzzle-rating-change" role="status">
+              {shownResult.error
+                ? shownResult.error
+                : shownResult.value && !shownResult.value.first
+                  ? 'Practice: you’d tried this puzzle before, so it isn’t rated.'
+                  : shownResult.value && (
+                      <>
+                        Puzzle rating {ratingText(shownResult.value.rating)}{' '}
+                        <strong className={`diff ${(shownResult.value.diff ?? 0) >= 0 ? 'up' : 'down'}`}>{diffText(shownResult.value.diff)}</strong>
+                      </>
+                    )}
+            </p>
+          )}
         </section>
 
         <section className="panel" aria-label="Your progress">
           <h2>Progress</h2>
+          {me ? (
+            <p className="puzzle-rating">
+              <span className="stat-value">{ratingText(me.puzzleRating)}</span>
+              <span className="muted small"> puzzle rating · ±{me.puzzleRating.deviation}</span>
+            </p>
+          ) : (
+            <p className="muted small">
+              <button type="button" className="link-button" onClick={onSignIn}>
+                Sign in
+              </button>{' '}
+              for a puzzle rating and a training dashboard. Progress below is kept in this browser.
+            </p>
+          )}
           <div className="stat-row">
             <div className="stat">
               <span className="stat-value">{stats.solved.length}</span>
@@ -299,16 +415,36 @@ export function PuzzleView({ active, onAnalyse }: Props) {
           </label>
           <label className="field">
             <span>Difficulty</span>
-            <select value={filter.difficulty} onChange={e => changeFilter({ ...filter, difficulty: e.target.value as Difficulty })}>
-              {(Object.keys(DIFFICULTY_LABEL) as Difficulty[]).map(d => (
-                <option key={d} value={d}>
-                  {DIFFICULTY_LABEL[d]}
-                </option>
-              ))}
-            </select>
+            {myRating !== null ? (
+              <select value={offset} onChange={e => changeOffset(Number(e.target.value))}>
+                {RELATIVE_DIFFICULTY.map(d => (
+                  <option key={d.offset} value={d.offset}>
+                    {d.label} ({d.offset > 0 ? '+' : ''}
+                    {d.offset === 0 ? 'your rating' : d.offset})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select value={filter.difficulty} onChange={e => changeFilter({ ...filter, difficulty: e.target.value as Difficulty })}>
+                {(Object.keys(DIFFICULTY_LABEL) as Difficulty[]).map(d => (
+                  <option key={d} value={d}>
+                    {DIFFICULTY_LABEL[d]}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
+          {daily && (
+            <button type="button" className="daily-button" onClick={() => startById(daily.id)} disabled={session.puzzle.id === daily.id}>
+              📅 Daily puzzle{daily.solved ? ' ✓' : ''}
+            </button>
+          )}
           <p className="muted">
-            {available === 0 ? 'No puzzles match these filters.' : `${available} puzzle${available === 1 ? '' : 's'} match.`}
+            {available === 0
+              ? 'No puzzles match these filters.'
+              : myRating !== null
+                ? `Picking puzzles near ${myRating + offset} from ${available}.`
+                : `${available} puzzle${available === 1 ? '' : 's'} match.`}
             {imported.length === 0 && ' Add more by importing a puzzle CSV (see README).'}
           </p>
         </section>

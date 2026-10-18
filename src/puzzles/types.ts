@@ -1,4 +1,11 @@
-import type { UciMove } from '../engine/search';
+import type { PieceSymbol, Square } from 'chess.js';
+
+/** A move in UCI terms (the same shape the engine uses); kept here so the server can load puzzles without the engine. */
+export interface UciMove {
+  from: Square;
+  to: Square;
+  promotion?: PieceSymbol;
+}
 
 export interface Puzzle {
   id: string;

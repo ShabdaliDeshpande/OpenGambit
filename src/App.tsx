@@ -145,7 +145,7 @@ export default function App() {
         />
       </div>
       <div hidden={tab !== 'puzzles'}>
-        <PuzzleView active={tab === 'puzzles'} onAnalyse={analyse} />
+        <PuzzleView active={tab === 'puzzles'} onAnalyse={analyse} me={me} onRated={account.refresh} onSignIn={() => setSigningIn(true)} />
       </div>
       <div hidden={tab !== 'analysis'}>
         <AnalysisView

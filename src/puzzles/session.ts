@@ -1,7 +1,6 @@
 import { Chess } from 'chess.js';
 import type { Color, Square } from 'chess.js';
-import type { UciMove } from '../engine/search';
-import type { Puzzle } from './types';
+import type { Puzzle, UciMove } from './types';
 
 export type Phase =
   /** Showing the start position; the setup move is about to be played. */
@@ -32,6 +31,8 @@ export interface PuzzleSession {
   /** True once the solver made a mistake, asked for a hint, or viewed the solution. */
   failed: boolean;
   hint: Square | null;
+  /** Moves played after the setup move (solver and replies), for checking a solve. */
+  played: UciMove[];
 }
 
 export type SessionAction =
@@ -71,6 +72,7 @@ export function startSession(puzzle: Puzzle, attempt = 0): PuzzleSession {
     lastMove: null,
     failed: false,
     hint: null,
+    played: [],
   };
 }
 
@@ -87,6 +89,7 @@ function advance(s: PuzzleSession, nextPhase: Phase): PuzzleSession {
     step,
     lastMove: { from: m.from, to: m.to },
     hint: null,
+    played: [...s.played, m],
     phase: step >= s.puzzle.solution.length ? 'solved' : nextPhase,
   };
 }
@@ -119,6 +122,7 @@ export function sessionReducer(s: PuzzleSession, a: SessionAction): PuzzleSessio
           step,
           lastMove: { from: a.move.from, to: a.move.to },
           hint: null,
+          played: [...s.played, a.move],
           phase: step >= s.puzzle.solution.length ? 'solved' : 'opponent',
         };
       }

@@ -1,7 +1,6 @@
 // No runtime imports: this module is shared with scripts/import-puzzles.ts,
 // which Node runs directly with type stripping.
-import type { Puzzle } from './types';
-import type { UciMove } from '../engine/search';
+import type { Puzzle, UciMove } from './types.ts';
 
 const UCI = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
 

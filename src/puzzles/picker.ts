@@ -12,7 +12,18 @@ export const DIFFICULTY_RANGE: Record<Difficulty, [number, number]> = {
 export interface PuzzleFilter {
   theme: string; // '' = any
   difficulty: Difficulty;
+  /** Pick puzzles closest to this rating (your rating plus a difficulty offset). */
+  target?: number | null;
 }
+
+/** Difficulty relative to your puzzle rating, as an offset in rating points. */
+export const RELATIVE_DIFFICULTY: readonly { label: string; offset: number }[] = [
+  { label: 'Easiest', offset: -600 },
+  { label: 'Easier', offset: -300 },
+  { label: 'Normal', offset: 0 },
+  { label: 'Harder', offset: 300 },
+  { label: 'Hardest', offset: 600 },
+];
 
 export interface PuzzleStats {
   solved: string[];
@@ -42,6 +53,15 @@ export function pickPuzzle(
   const pool = all.filter(p => matches(p, filter));
   if (pool.length === 0) return null;
   const attempted = new Set([...stats.solved, ...stats.failed]);
+  if (filter.target !== undefined && filter.target !== null) {
+    // the puzzles nearest the target: a handful, so there's still some variety
+    const target = filter.target;
+    const byDistance = pool.filter(p => p.id !== currentId).sort((a, b) => Math.abs(a.rating - target) - Math.abs(b.rating - target));
+    const freshNear = byDistance.filter(p => !attempted.has(p.id)).slice(0, 5);
+    const near = freshNear.length ? freshNear : byDistance.slice(0, 5);
+    if (near.length) return near[Math.floor(rng() * near.length)]!;
+    return pool[0]!;
+  }
   const fresh = pool.filter(p => !attempted.has(p.id) && p.id !== currentId);
   const others = pool.filter(p => p.id !== currentId);
   const choices = fresh.length ? fresh : others.length ? others : pool;

@@ -227,3 +227,16 @@ lila's Swiss pairing runs the external bbpPairings program, which isn't in the c
 - **Swiss:** win 1, draw ½. A bye is worth 1, given when no pairing is found. No draws before move 30. Late join is open until more than half the rounds have started. Sonneborn–Berger breaks ties. The tournament ends early when every possible pairing has been played.
 
 **Not taken over:** team battles, scheduled and shield tournaments, entry conditions, forbidden or manual pairings, chat, the "absent after a missed game" rules beyond pausing the player, and the full FIDE Dutch pairing rules.
+
+## 10. Puzzle ratings (Phase 8)
+
+**Sources.** I read `modules/puzzle/src/main/PuzzleFinisher.scala`, `PuzzleDifficulty.scala`, `PuzzleDashboard.scala` and `DailyPuzzle.scala`, and the strings in `translation/source/puzzle.xml`, all in the local clone.
+
+**Behaviour taken over (as rules, not code):**
+- **Rating:** a puzzle counts as a game between you and the puzzle (Glicko-2). Only your first play of a puzzle is rated.
+- **Theme training:** results count for less when you train a theme, because it hints at the answer. That's 0.1 for a won obvious theme like a mate (0.4 lost), 0.2 / 0.7 for hinting tactical themes, and 0.7 / 0.8 for non-hinting ones like endgame. A mix counts fully.
+- **Difficulty:** offsets from your rating of −600, −300, 0, +300 and +600.
+- **Dashboard:** a theme's performance is its average puzzle rating − 500 + 1000 × your first-try success rate. A theme is an improvement area with 3+ failures below your overall performance, and a strength with 3+ first-try wins above it.
+- **Daily puzzle:** one per day.
+
+**Not taken over:** puzzles have their own changing ratings in lila; here they're fixed. Also left out: the puzzle streak and storm modes, replays of failed puzzles, opening-based puzzle selection, and lila's "dubious player" checks.
