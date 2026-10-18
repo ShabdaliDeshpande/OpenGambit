@@ -41,3 +41,10 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 ## Phase 6: Tournaments (done)
 - Arena format (time-boxed, with berserk and streak bonuses) and Swiss format.
 - Pairing engine, live standings, and tournament chat (optional). **Decided:** our own minimum-cost matching for both formats, with a simplified Dutch-style Swiss. Tournaments need an account to create or join. Chat was left out (it needs moderation).
+
+## Phase 7: Play-feel polish (done)
+- Move animation on the board (respects "reduce motion").
+- Sounds for moves, captures, checks, game start and end, and low time. They're generated in code (no audio files) and can be turned off.
+- Premoves: queue a move during the opponent's turn, played the moment it becomes yours if it's still legal.
+- Rematch button after online games: offer, accept or decline, with colours swapped.
+- Installable app (PWA): manifest, original icons, and offline play vs the computer, puzzles and analysis.

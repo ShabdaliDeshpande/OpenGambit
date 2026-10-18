@@ -144,6 +144,16 @@ In both formats:
 
 The pairing engine is in [server/tournament/](server/tournament/). Both formats solve a minimum-cost matching ([matching.ts](server/tournament/matching.ts)): it's exact up to 18 waiting players and uses a greedy start with swap improvements above that.
 
+## Features (Phase 7: Play-feel polish)
+
+| | What it does |
+|---|---|
+| Move animation | Pieces slide to their new square, and the rook slides too when castling. Pieces you drag aren't animated (you already put them there), and nothing animates when you jump around a game or load one. Turned off if your system asks for reduced motion. |
+| Sounds | Moves, captures, checks, game start, game end and a beep when your clock drops under 10 seconds. They're synthesised in the browser with the Web Audio API, so no sound files are shipped. **🔊** in the top bar turns them off, and the choice is remembered. |
+| Premoves | During the opponent's turn (online, or against the computer), drag or click one of your pieces to queue a move: its squares turn orange. It's played the instant your turn comes if it's still legal, and dropped if not. Promotions become a queen. Click elsewhere or right-click to cancel. |
+| Rematch | After an online game, **↻ Rematch** offers a new game with the same time control and colours swapped. The opponent can accept or decline, and you can withdraw the offer. Tournament games have no rematch. |
+| Install as an app | OpenGambit has a web app manifest, its own icon and a service worker, so browsers offer **Install**. Once installed or visited, playing the computer, puzzles and the analysis board work offline. Online play needs a connection. The service worker is only active in production builds (`npm run build`), never in `npm run dev`. |
+
 ## Deploying
 
 The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
@@ -166,6 +176,8 @@ src/
     clock.ts      time controls and clock math (time is injected, so tests are deterministic)
     gameEnd.ts    end-of-game detection and result text
     game.ts       game state reducer, plus PGN export/import and FEN validation
+    premove.ts    premove targets and checking a premove when the turn comes
+    animation.ts  which pieces slide, and which sound a move makes
   analysis/     analysis board logic (pure, unit-tested)
     tree.ts       immutable move tree with variations, comments and glyphs
     pgn.ts        PGN reader and writer for trees (variations, comments, NAGs)
@@ -179,7 +191,8 @@ src/
   components/   Board (with arrows), Piece, PromotionPicker, ClockDisplay, MoveList, GameControls,
                 SetupPanel, PgnFenPanel, PlayView
     analysis/     AnalysisView, EvalBar, EngineLines, TreeView, NodeTools
-  hooks/        useEngine, useAnalysis, useKeyboardNav, useTheme
+  hooks/        useEngine, useAnalysis, useKeyboardNav, useTheme, useOnline, useAccount, useGameSounds
+  sound/sounds.ts  synthesised game sounds (Web Audio) and the on/off setting
   online/       client side of online play
     protocol.ts   message types shared with the server
     client.ts     the WebSocket client (reconnects and re-subscribes by itself)
@@ -203,6 +216,7 @@ server/         the server (Node, run directly from TypeScript)
   index.ts      standalone server for `npm start`
   config.ts     timeouts and limits
 scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a running server
+public/         manifest.webmanifest, icons/, sw.js (service worker for install and offline play)
 scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
 ```
 
@@ -257,13 +271,13 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Tournaments are basic.** There's no tournament chat (left out on purpose: it would need moderation), no team battles, no scheduled or recurring events, no private or password-protected tournaments, no editing after creation, and no notifications outside the open tab.
 - **The Swiss pairing is a simplified version of the Dutch system,** not the full FIDE rules. It does keep the main guarantees: no rematches, similar scores, colour balance and fair byes.
 - **Guests are per tab.** Opening a game link in a new tab as a guest makes you a spectator. Signed-in players are the same player in every tab.
-- **No chat, rematch, takebacks, premoves or extra time** in online games.
+- **No chat, takebacks or extra time** in online games, and only one premove can be queued at a time.
+- **Offline play needs one visit first.** The service worker saves files as they are used, so the computer opponent works offline only after you have played it once online.
 - **Account features are minimal.** There's no password reset, email, password change, account deletion, leaderboard or rating-range filter for seeks.
 - **The PostgreSQL code path hasn't been run in this project's tests,** because no Postgres server was available. The same store tests run against it when `TEST_DATABASE_URL` points to an empty test database.
 - **Basic protection only.** The server checks messages and origins and limits connections, messages, logins and sign-ups. It has no TLS of its own (use a host or reverse proxy that provides HTTPS) and no moderation.
 - **Lag compensation is a simple model**: half the measured round trip, capped per move and by a refilling budget.
 
-- **No premoves, sounds or move animation.**
 - **Threefold and the 50-move rule end the game automatically.** There is no claim step as in over-the-board rules or on lila.
 - **The clock follows a simplified start rule.** White's first move starts Black's clock, and no increment is added for that first move.
 - **Pieces depend on system fonts.** They're Unicode glyphs, so they look slightly different between operating systems.

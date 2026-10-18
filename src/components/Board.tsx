@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Chess } from 'chess.js';
 import type { Color, PieceSymbol, Square } from 'chess.js';
 import { Piece } from './Piece';
 import { PromotionPicker } from './PromotionPicker';
+import { moveSoundFor, slidesFor } from '../chess/animation';
+import { playSound } from '../sound/sounds';
+import { premoveDests, type Premove } from '../chess/premove';
 
 const FILES = 'abcdefgh';
 
@@ -24,7 +27,15 @@ export interface BoardProps {
   arrows?: Arrow[];
   /** Squares to highlight (e.g. a hint). */
   marks?: Square[];
+  /** The side that may queue a premove while it's the other side's turn. */
+  premoveColor?: Color | null;
+  premove?: Premove | null;
+  onPremove?: (pm: Premove) => void;
+  onCancelPremove?: () => void;
 }
+
+const SLIDE_MS = 200;
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /** Center of a square in board units (0..8), as seen with `orientation` at the bottom. */
 function squareCenter(sq: Square, orientation: Color) {
@@ -81,17 +92,68 @@ function squareAt(index: number, orientation: Color): Square {
   return `${FILES[file]}${rank}` as Square;
 }
 
-export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows = [], marks = [] }: BoardProps) {
+/** Column and row (0..7) of a square as displayed, top-left first. */
+function displayPos(sq: Square, orientation: Color) {
+  const file = sq.charCodeAt(0) - 97;
+  const rank = Number(sq[1]) - 1;
+  return orientation === 'w' ? { col: file, row: 7 - rank } : { col: 7 - file, row: rank };
+}
+
+export function Board({
+  fen,
+  orientation,
+  movableColor,
+  lastMove,
+  onMove,
+  arrows = [],
+  marks = [],
+  premoveColor = null,
+  premove = null,
+  onPremove,
+  onCancelPremove,
+}: BoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<Square | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [promotion, setPromotion] = useState<{ from: Square; to: Square } | null>(null);
+  const [slides, setSlides] = useState<{ id: number; offsets: Map<Square, { dx: number; dy: number }> } | null>(null);
+  const prevFen = useRef<string | null>(null);
+  const droppedMove = useRef<string | null>(null);
+  const slideId = useRef(0);
 
   const chess = useMemo(() => new Chess(fen), [fen]);
+  const premoving = !!premoveColor && !!onPremove && chess.turn() !== premoveColor && movableColor !== chess.turn();
 
-  // legal destinations per origin square, only for the movable side
+  // a move played forward sounds, and its piece (and a castling rook) slides from where it was;
+  // a piece dropped by hand is already in place
+  useLayoutEffect(() => {
+    const before = prevFen.current;
+    prevFen.current = fen;
+    const sound = moveSoundFor(before, fen, lastMove);
+    if (sound) playSound(sound);
+    const moves = slidesFor(before, fen, lastMove);
+    const dropped = droppedMove.current;
+    droppedMove.current = null;
+    if (moves.length === 0 || reducedMotion() || (lastMove && dropped === lastMove.from + lastMove.to)) return setSlides(null);
+    const offsets = new Map<Square, { dx: number; dy: number }>();
+    for (const m of moves) {
+      const [a, b] = [displayPos(m.from, orientation), displayPos(m.to, orientation)];
+      offsets.set(m.to, { dx: (a.col - b.col) * 12.5, dy: (a.row - b.row) * 12.5 });
+    }
+    const id = ++slideId.current;
+    setSlides({ id, offsets });
+    const t = setTimeout(() => setSlides(cur => (cur?.id === id ? null : cur)), SLIDE_MS + 50);
+    return () => clearTimeout(t);
+    // only a position change starts an animation
+  }, [fen]);
+
+  // legal destinations per origin square for the movable side, or premove targets while waiting
   const dests = useMemo(() => {
     const map = new Map<Square, { to: Square; capture: boolean; promotion: boolean }[]>();
+    if (premoving && premoveColor) {
+      for (const [from, tos] of premoveDests(fen, premoveColor)) map.set(from, tos.map(to => ({ to, capture: false, promotion: false })));
+      return map;
+    }
     if (!movableColor || chess.turn() !== movableColor) return map;
     for (const m of chess.moves({ verbose: true })) {
       const list = map.get(m.from) ?? [];
@@ -99,7 +161,7 @@ export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows
       map.set(m.from, list);
     }
     return map;
-  }, [chess, movableColor]);
+  }, [chess, fen, movableColor, premoving, premoveColor]);
 
   const checkSquare = useMemo(() => {
     if (!chess.inCheck()) return null;
@@ -124,10 +186,15 @@ export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows
     return { x, y, square: squareAt(Math.floor(y * 8) * 8 + Math.floor(x * 8), orientation) };
   };
 
-  const tryMove = (from: Square, to: Square) => {
+  const tryMove = (from: Square, to: Square, dropped = false) => {
     const dest = destsOf(from).find(d => d.to === to);
     if (!dest) return false;
     setSelected(null);
+    if (premoving) {
+      onPremove?.({ from, to });
+      return true;
+    }
+    if (dropped) droppedMove.current = from + to;
     if (dest.promotion) setPromotion({ from, to });
     else onMove(from, to);
     return true;
@@ -146,6 +213,8 @@ export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows
       setDrag({ from: sq, pointerId: e.pointerId, x: hit.x, y: hit.y, moved: false });
     } else {
       setSelected(null);
+      // clicking elsewhere drops a queued premove
+      if (premove) onCancelPremove?.();
     }
   };
 
@@ -162,7 +231,7 @@ export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows
     const target = hit?.square;
     // dropping back on the origin square leaves it selected for click-to-move
     if (target && target !== drag.from) {
-      if (!tryMove(drag.from, target) && drag.moved) setSelected(null);
+      if (!tryMove(drag.from, target, drag.moved) && drag.moved) setSelected(null);
     }
   };
 
@@ -179,13 +248,22 @@ export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows
     if (selected === sq) classes.push('selected');
     if (checkSquare === sq) classes.push('check');
     if (marks.includes(sq)) classes.push('marked');
+    if (premove && (premove.from === sq || premove.to === sq)) classes.push('premove');
     if (dest) classes.push(dest.capture ? 'dest-capture' : 'dest');
     const dragging = drag?.moved && drag.from === sq;
     squares.push(
       <div key={sq} className={classes.join(' ')} data-square={sq}>
         {col === 0 && <span className="coord rank">{sq[1]}</span>}
         {row === 7 && <span className="coord file">{sq[0]}</span>}
-        {piece && <Piece color={piece.color} type={piece.type} ghost={!!dragging} />}
+        {piece && (
+          <Piece
+            key={slides?.offsets.has(sq) ? `slide-${slides.id}` : 'still'}
+            color={piece.color}
+            type={piece.type}
+            ghost={!!dragging}
+            slide={slides?.offsets.get(sq) ?? null}
+          />
+        )}
       </div>,
     );
   }
@@ -195,11 +273,19 @@ export function Board({ fen, orientation, movableColor, lastMove, onMove, arrows
   return (
     <div
       ref={boardRef}
-      className={`board${movableColor ? ' interactive' : ''}`}
+      className={`board${movableColor || premoving ? ' interactive' : ''}${premoving ? ' premoving' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDrag(null)}
+      onContextMenu={e => {
+        // right-click cancels a premove
+        if (premove || selected) {
+          e.preventDefault();
+          setSelected(null);
+          onCancelPremove?.();
+        }
+      }}
       role="grid"
       aria-label="Chess board"
     >

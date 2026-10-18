@@ -24,6 +24,9 @@ import { describeResult } from '../chess/gameEnd';
 import { acceptsDraw } from '../engine/search';
 import { useEngine } from '../hooks/useEngine';
 import { useKeyboardNav } from '../hooks/useKeyboardNav';
+import { useGameEndSound, useLowTimeWarning } from '../hooks/useGameSounds';
+import { resolvePremove, type Premove } from '../chess/premove';
+import { playSound } from '../sound/sounds';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 const turnOf = (fen: string): Color => (fen.split(' ')[1] === 'b' ? 'b' : 'w');
@@ -41,6 +44,7 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse }: Pro
   const [game, dispatch] = useReducer(gameReducer, DEFAULT_SETUP, s => createGame(s));
   const [now, setNow] = useState(() => performance.now());
   const [notice, setNotice] = useState<string | null>(null);
+  const [premove, setPremove] = useState<Premove | null>(null);
   const engine = useEngine();
 
   const { setup } = game;
@@ -87,10 +91,26 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse }: Pro
       dispatch({ type: 'new', setup: s, ...(startFen ? { startFen } : {}) });
       setOrientation(s.mode === 'computer' ? s.humanColor : 'w');
       setNotice(null);
+      setPremove(null);
       setNow(performance.now());
+      playSound('start');
     },
     [setOrientation],
   );
+
+  useGameEndSound(!!game.result);
+  const watchedClock = setup.mode === 'computer' ? setup.humanColor : turn;
+  useLowTimeWarning(game.clock ? remainingMs(game.clock, watchedClock, now) : null, clockRunning && turn === watchedClock);
+
+  // a premove queued during the computer's turn is played as soon as the turn comes back
+  useEffect(() => {
+    if (!premove || !engineColor) return;
+    if (game.result) return setPremove(null);
+    if (turn === engineColor) return;
+    const move = resolvePremove(live, premove);
+    setPremove(null);
+    if (move) dispatch({ type: 'move', from: move.from, to: move.to, ...(move.promotion ? { promotion: move.promotion } : {}), now: performance.now() });
+  }, [game.moves.length, game.result, turn]);
 
   const onMove = useCallback(
     (from: Square, to: Square, promotion?: PieceSymbol) =>
@@ -150,7 +170,17 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse }: Pro
   return (
     <main className="layout">
       <div className="board-wrap">
-        <Board fen={shownFen} orientation={orientation} movableColor={movableColor} lastMove={lastMove} onMove={onMove} />
+        <Board
+          fen={shownFen}
+          orientation={orientation}
+          movableColor={movableColor}
+          lastMove={lastMove}
+          onMove={onMove}
+          premoveColor={engineColor && !game.result && viewingLive ? setup.humanColor : null}
+          premove={premove}
+          onPremove={setPremove}
+          onCancelPremove={() => setPremove(null)}
+        />
       </div>
 
       <aside className="side">

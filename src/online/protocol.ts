@@ -76,6 +76,11 @@ export interface GameSnapshot {
   /** Who went berserk (halved their clock) in this tournament game. */
   berserk: { w: boolean; b: boolean };
   canBerserk: boolean;
+  /** Who is offering a rematch, once the game is over. */
+  rematchOffer: Color | null;
+  canRematch: boolean;
+  /** The rematch game, once both players agreed. */
+  nextGame: string | null;
   drawOffer: Color | null;
   /** Whether the viewer may offer a draw now (rate limited). */
   canOfferDraw: boolean;
@@ -191,6 +196,7 @@ export type ClientMessage =
   | { t: 'draw'; game: string; action: DrawAction }
   | { t: 'claim'; game: string; outcome: 'win' | 'draw' }
   | { t: 'berserk'; game: string }
+  | { t: 'rematch'; game: string; offer: boolean }
   | { t: 'bye' }
   | { t: 'tours'; on: boolean }
   | { t: 'watchTour'; id: string }

@@ -1464,3 +1464,37 @@ button.berserk {
     display: none;
   }
 }
+
+/* ---------- move animation and premoves ---------- */
+
+.piece.sliding {
+  z-index: 5;
+  animation: piece-slide 200ms ease-out;
+}
+
+@keyframes piece-slide {
+  from {
+    transform: translate(var(--dx), var(--dy));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piece.sliding {
+    animation: none;
+  }
+}
+
+.sq.premove::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(214, 120, 40, 0.45);
+}
+
+.board.premoving .sq.dest::after {
+  background: rgba(214, 120, 40, 0.5);
+}
+
+.board.premoving .sq.selected::before {
+  background: rgba(214, 120, 40, 0.5);
+}

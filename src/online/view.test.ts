@@ -23,6 +23,9 @@ const snapshot = (over: Partial<GameSnapshot> = {}): GameSnapshot => ({
   tournament: null,
   berserk: { w: false, b: false },
   canBerserk: false,
+  rematchOffer: null,
+  canRematch: false,
+  nextGame: null,
   ...over,
 });
 

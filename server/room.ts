@@ -65,6 +65,9 @@ export class GameRoom {
   /** Set for tournament games: no abort, a missed first move loses, optional berserk. */
   readonly tournament: TournamentRules | null;
   readonly berserked: Record<Color, boolean> = { w: false, b: false };
+  rematchOffer: Color | null = null;
+  nextGame: string | null = null;
+  private readonly startRematch: ((room: GameRoom) => string) | null;
   private readonly increment: Record<Color, number>;
   private readonly cfg: ServerConfig;
   private readonly onChange: (room: GameRoom) => void;
@@ -76,7 +79,13 @@ export class GameRoom {
     black: Player,
     cfg: ServerConfig,
     onChange: (room: GameRoom) => void,
-    options: { rated?: boolean; ratings?: Record<Color, ShownRating | null>; tournament?: TournamentRules } = {},
+    options: {
+      rated?: boolean;
+      ratings?: Record<Color, ShownRating | null>;
+      tournament?: TournamentRules;
+      /** Starts the rematch game (colours swapped) and returns its id. */
+      startRematch?: (room: GameRoom) => string;
+    } = {},
   ) {
     this.id = id;
     this.tc = tc;
@@ -85,6 +94,7 @@ export class GameRoom {
     this.rated = options.rated ?? false;
     this.ratings = options.ratings ?? { w: null, b: null };
     this.tournament = options.tournament ?? null;
+    this.startRematch = options.startRematch ?? null;
     this.increment = { w: tc.incrementMs, b: tc.incrementMs };
     this.createdAt = cfg.now();
     const seat = (player: Player): Seat => ({
@@ -217,6 +227,25 @@ export class GameRoom {
     return null;
   }
 
+  /**
+   * After the game: offer a rematch, accept the opponent's offer (which starts
+   * the new game with colours swapped), or withdraw / decline with offer=false.
+   */
+  rematch(conn: Conn, offer: boolean): string | null {
+    const color = this.colorOf(conn.player);
+    if (!color) return 'You are not playing in this game.';
+    if (this.status === 'playing') return 'The game is still being played.';
+    if (this.tournament || !this.startRematch) return 'Tournament games can’t be rematched.';
+    if (this.nextGame) return null;
+    if (!offer) this.rematchOffer = null;
+    else if (this.rematchOffer === opposite(color)) {
+      this.rematchOffer = null;
+      this.nextGame = this.startRematch(this);
+    } else this.rematchOffer = color;
+    this.broadcast();
+    return null;
+  }
+
   /** Tournament option: halve your own clock and drop the increment, for an extra point on a win. */
   berserk(conn: Conn): string | null {
     const color = this.colorOf(conn.player);
@@ -301,6 +330,9 @@ export class GameRoom {
       tournament: this.tournament ? { id: this.tournament.id, name: this.tournament.name } : null,
       berserk: { ...this.berserked },
       canBerserk: you !== null && this.canBerserk(you),
+      rematchOffer: this.rematchOffer,
+      canRematch: you !== null && this.status !== 'playing' && !this.tournament && !!this.startRematch && !this.nextGame,
+      nextGame: this.nextGame,
       drawOffer: this.drawOffer,
       canOfferDraw: you !== null && this.canOfferDraw(you),
       opponentGone: you ? this.goneFor(opposite(you), now) : null,

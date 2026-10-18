@@ -65,6 +65,8 @@ function parseMessage(raw: string): ClientMessage | null {
     case 'abort':
     case 'berserk':
       return game ? { t: o.t, game: o.game as string } : null;
+    case 'rematch':
+      return game && typeof o.offer === 'boolean' ? { t: 'rematch', game: o.game as string, offer: o.offer } : null;
     case 'tours':
       return typeof o.on === 'boolean' ? { t: 'tours', on: o.on } : null;
     case 'watchTour':
@@ -268,7 +270,9 @@ export class Hub {
                   ? room.draw(conn, msg.action)
                   : msg.t === 'berserk'
                     ? room.berserk(conn)
-                    : room.claim(conn, msg.outcome);
+                    : msg.t === 'rematch'
+                      ? room.rematch(conn, msg.offer)
+                      : room.claim(conn, msg.outcome);
         if (error) {
           conn.send({ t: 'error', message: error, game: room.id });
           // resync the sender's board after a rejected move
@@ -411,7 +415,7 @@ export class Hub {
     const room = new GameRoom(id, tc, white, black, this.cfg, r => this.roomChanged(r), {
       rated: rated && !!white.account && !!black.account,
       ratings: { w: this.shownRating(white, tc), b: this.shownRating(black, tc) },
-      ...(tournament ? { tournament } : {}),
+      ...(tournament ? { tournament } : { startRematch: (r: GameRoom) => this.startGame(r.tc, r.player('b'), r.player('w'), r.rated) }),
     });
     this.rooms.set(id, room);
     // both players are now busy: their other seeks go away

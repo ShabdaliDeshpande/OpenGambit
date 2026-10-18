@@ -13,10 +13,19 @@ const GLYPH: Record<PieceSymbol, string> = {
 
 const NAME: Record<PieceSymbol, string> = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
 
-export function Piece({ color, type, ghost = false }: { color: Color; type: PieceSymbol; ghost?: boolean }) {
+interface Props {
+  color: Color;
+  type: PieceSymbol;
+  ghost?: boolean;
+  /** Animate in from this offset, in % of the board width. */
+  slide?: { dx: number; dy: number } | null;
+}
+
+export function Piece({ color, type, ghost = false, slide = null }: Props) {
   return (
     <span
-      className={`piece ${color === 'w' ? 'white' : 'black'}${ghost ? ' ghost' : ''}`}
+      className={`piece ${color === 'w' ? 'white' : 'black'}${ghost ? ' ghost' : ''}${slide ? ' sliding' : ''}`}
+      style={slide ? ({ '--dx': `${slide.dx}cqw`, '--dy': `${slide.dy}cqw` } as React.CSSProperties) : undefined}
       role="img"
       aria-label={`${color === 'w' ? 'white' : 'black'} ${NAME[type]}`}
     >

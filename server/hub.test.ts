@@ -295,6 +295,46 @@ describe('game rooms', () => {
   });
 });
 
+describe('rematch', () => {
+  it('starts a new game with colours swapped once both agree', () => {
+    const { pair, hub } = testHub();
+    const { a, b, id, move } = pair();
+    a.send({ t: 'rematch', game: id, offer: true });
+    expect(a.errors()).toEqual(['The game is still being played.']);
+    move(a, 'e2e4');
+    move(b, 'e7e5');
+    a.send({ t: 'resign', game: id });
+
+    expect(b.game()).toMatchObject({ canRematch: true, rematchOffer: null });
+    b.send({ t: 'rematch', game: id, offer: true });
+    expect(a.game().rematchOffer).toBe('b');
+    // offering again just repeats; withdrawing clears it
+    b.send({ t: 'rematch', game: id, offer: false });
+    expect(a.game().rematchOffer).toBeNull();
+    b.send({ t: 'rematch', game: id, offer: true });
+    a.send({ t: 'rematch', game: id, offer: true });
+
+    const next = a.game().nextGame!;
+    expect(next).toBeTruthy();
+    expect(b.last('started')!.game).toBe(next);
+    const room = hub.room(next)!;
+    expect(room.player('w').id).toBe(b.last('welcome')!.id);
+    expect(room.player('b').id).toBe(a.last('welcome')!.id);
+    expect(room.tc.id).toBe('5+0');
+    expect(a.game()).toMatchObject({ canRematch: false, rematchOffer: null });
+  });
+
+  it('lets the opponent decline, and works after an abort too', () => {
+    const { pair } = testHub();
+    const { a, b, id } = pair();
+    a.send({ t: 'abort', game: id });
+    a.send({ t: 'rematch', game: id, offer: true });
+    expect(b.game().rematchOffer).toBe('w');
+    b.send({ t: 'rematch', game: id, offer: false });
+    expect(a.game()).toMatchObject({ rematchOffer: null, nextGame: null, canRematch: true });
+  });
+});
+
 describe('disconnects', () => {
   it('lets the opponent claim after the disconnect timeout', () => {
     const { pair, disconnect } = testHub();

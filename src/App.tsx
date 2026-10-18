@@ -9,6 +9,7 @@ import { ProfileView } from './components/account/ProfileView';
 import { opposite } from './chess/clock';
 import { useAccount } from './hooks/useAccount';
 import { useTheme } from './hooks/useTheme';
+import { useSoundSetting } from './hooks/useGameSounds';
 
 type Tab = 'play' | 'online' | 'puzzles' | 'analysis' | 'profile';
 
@@ -33,6 +34,7 @@ export default function App() {
   const [analysisRequest, setAnalysisRequest] = useState<{ pgn: string; nonce: number } | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const [soundOn, setSoundOn] = useSoundSetting();
   const account = useAccount();
   const me = account.me ?? null;
 
@@ -85,6 +87,15 @@ export default function App() {
               ⇅ Flip
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setSoundOn(!soundOn)}
+            title={soundOn ? 'Turn sounds off' : 'Turn sounds on'}
+            aria-label={soundOn ? 'Turn sounds off' : 'Turn sounds on'}
+            aria-pressed={soundOn}
+          >
+            {soundOn ? '🔊' : '🔇'}
+          </button>
           <button type="button" onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? '☀ Light' : '☾ Dark'}
           </button>
