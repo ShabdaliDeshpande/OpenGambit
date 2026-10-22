@@ -3,6 +3,7 @@ import { useOnline } from '../../hooks/useOnline';
 import { Leaderboard } from './Leaderboard';
 import { Lobby } from './Lobby';
 import type { Me } from '../../account/api';
+import type { GameSetup } from '../../chess/game';
 import { OnlineGame } from './OnlineGame';
 import { TournamentPage } from './TournamentPage';
 import { Tournaments } from './Tournaments';
@@ -34,12 +35,14 @@ interface Props {
   signedIn: boolean;
   /** Your game ratings, to grey out seeks whose rating range you're outside. */
   myRatings: Me['ratings'] | null;
+  /** Starts a game against the computer on the Play tab. */
+  onPlayComputer: (setup: GameSetup) => void;
   onSignIn: () => void;
   onOpenProfile: (name: string) => void;
   onAnalyse: (pgn: string) => void;
 }
 
-export function OnlineView({ active, signedIn, myRatings, onSignIn, onOpenProfile, onAnalyse }: Props) {
+export function OnlineView({ active, signedIn, myRatings, onPlayComputer, onSignIn, onOpenProfile, onAnalyse }: Props) {
   const [screen, setScreen] = useState<Screen>(screenFromUrl);
   const { client, state } = useOnline(active || screen.kind !== 'lobby');
   const seenStarted = useRef(0);
@@ -137,6 +140,7 @@ export function OnlineView({ active, signedIn, myRatings, onSignIn, onOpenProfil
           state={state}
           signedIn={signedIn}
           myRatings={myRatings}
+          onPlayComputer={onPlayComputer}
           onSignIn={onSignIn}
           onOpenProfile={onOpenProfile}
           onWatch={openGame}

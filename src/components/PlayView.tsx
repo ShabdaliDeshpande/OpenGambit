@@ -38,9 +38,11 @@ interface Props {
   setOrientation: (o: Color) => void;
   /** Opens the analysis board with this game's PGN. */
   onAnalyse: (pgn: string) => void;
+  /** A game to start from elsewhere (the lobby's "play the computer"); `n` changes with each request. */
+  request?: { setup: GameSetup; n: number } | null;
 }
 
-export function PlayView({ active, orientation, setOrientation, onAnalyse }: Props) {
+export function PlayView({ active, orientation, setOrientation, onAnalyse, request = null }: Props) {
   const [game, dispatch] = useReducer(gameReducer, DEFAULT_SETUP, s => createGame(s));
   const [now, setNow] = useState(() => performance.now());
   const [notice, setNotice] = useState<string | null>(null);
@@ -97,6 +99,10 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse }: Pro
     },
     [setOrientation],
   );
+
+  useEffect(() => {
+    if (request) startGame(request.setup);
+  }, [request?.n]);
 
   useGameEndSound(!!game.result);
   const watchedClock = setup.mode === 'computer' ? setup.humanColor : turn;
@@ -224,7 +230,7 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse }: Pro
           </button>
         </section>
 
-        <SetupPanel initial={setup} onStart={s => startGame(s)} />
+        <SetupPanel key={game.id} initial={setup} onStart={s => startGame(s)} />
 
         <PgnFenPanel
           pgn={pgn}

@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ratingText, type Me } from '../../account/api';
+import type { GameSetup } from '../../chess/game';
+import { MAX_LEVEL, MIN_LEVEL } from '../../engine/search';
 import { findTimeControl, speedOf, TIME_CONTROLS } from '../../chess/clock';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import { SEEK_RANGES, type SeekColor, type SeekInfo } from '../../online/protocol';
@@ -15,15 +17,23 @@ interface Props {
   /** Signed in according to the account API (the socket may still be reconnecting). */
   signedIn: boolean;
   myRatings: Me['ratings'] | null;
+  onPlayComputer: (setup: GameSetup) => void;
   onSignIn: () => void;
   onOpenProfile: (name: string) => void;
   onWatch: (game: string) => void;
 }
 
-export function Lobby({ client, state, signedIn, myRatings, onSignIn, onOpenProfile, onWatch }: Props) {
+/** After this long with nobody accepting your seek, the computer is offered. */
+const WAIT_BEFORE_OFFER_MS = 15_000;
+
+export function Lobby({ client, state, signedIn, myRatings, onPlayComputer, onSignIn, onOpenProfile, onWatch }: Props) {
   const [color, setColor] = useState<SeekColor>('random');
   const [ratedChoice, setRatedChoice] = useState(true);
   const [range, setRange] = useState<number | null>(null);
+  const [lastTc, setLastTc] = useState('5+0');
+  const [level, setLevel] = useState(3);
+  const waitingSince = useRef<number | null>(null);
+  const [, setTick] = useState(0);
   const { me, lobby } = state;
   const ready = !!client && state.status === 'online';
   const registered = !!me?.registered;
@@ -31,6 +41,36 @@ export function Lobby({ client, state, signedIn, myRatings, onSignIn, onOpenProf
   const seeks = lobby?.seeks ?? [];
   const mine = seeks.filter(s => s.owner === me?.id);
   const error = state.error && !state.error.game ? state.error : null;
+  const othersSeeking = seeks.some(s => s.owner !== me?.id);
+
+  // how long your seek has been waiting, to offer the computer instead
+  useEffect(() => {
+    if (mine.length === 0) {
+      waitingSince.current = null;
+      return;
+    }
+    waitingSince.current ??= performance.now();
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [mine.length]);
+  const waitedLong = waitingSince.current !== null && performance.now() - waitingSince.current >= WAIT_BEFORE_OFFER_MS;
+
+  /** Plays the computer with this time control and colour (a random colour is picked now). */
+  const playComputer = (tc: string, seekColor: SeekColor) => {
+    for (const s of mine) client?.send({ t: 'cancelSeek', id: s.id });
+    const humanColor = seekColor === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : seekColor;
+    onPlayComputer({ mode: 'computer', humanColor, level, timeControlId: tc });
+  };
+
+  const levelSelect = (
+    <select value={level} onChange={e => setLevel(Number(e.target.value))} aria-label="Computer level">
+      {Array.from({ length: MAX_LEVEL - MIN_LEVEL + 1 }, (_, i) => i + MIN_LEVEL).map(l => (
+        <option key={l} value={l}>
+          Level {l}
+        </option>
+      ))}
+    </select>
+  );
   // a seek with a rating range only accepts players within it
   const withinRange = (s: SeekInfo) => {
     if (s.range === null || !s.rating) return true;
@@ -89,7 +129,10 @@ export function Lobby({ client, state, signedIn, myRatings, onSignIn, onOpenProf
         )}
         <div className="tc-grid">
           {TIME_CONTROLS.map(tc => (
-            <button key={tc.id} type="button" disabled={!ready} onClick={() => client?.send({ t: 'seek', tc: tc.id, color, rated, range })}>
+            <button key={tc.id} type="button" disabled={!ready} onClick={() => {
+                setLastTc(tc.id);
+                client?.send({ t: 'seek', tc: tc.id, color, rated, range });
+              }}>
               <strong>{tc.id}</strong>
               <span>{tc.label.split(' ')[1]}</span>
             </button>
@@ -100,6 +143,17 @@ export function Lobby({ client, state, signedIn, myRatings, onSignIn, onOpenProf
             Waiting for an opponent…
           </p>
         )}
+        {mine.length > 0 && waitedLong && !othersSeeking && (
+          <div className="computer-offer" role="status">
+            <span>Nobody has joined yet. Play the computer instead?</span>
+            <div className="row">
+              {levelSelect}
+              <button type="button" className="primary" onClick={() => playComputer(mine[0]!.tc, mine[0]!.color)}>
+                🤖 Play the computer
+              </button>
+            </div>
+          </div>
+        )}
         {error && (
           <p className="error" role="alert" key={error.n}>
             {error.message}
@@ -109,6 +163,17 @@ export function Lobby({ client, state, signedIn, myRatings, onSignIn, onOpenProf
 
       <section className="panel" aria-label="Open seeks">
         <h2>Open seeks</h2>
+        {!othersSeeking && mine.length === 0 && (
+          <div className="computer-offer">
+            <span>Nobody is looking for a game right now. Play the computer while you wait for someone?</span>
+            <div className="row">
+              {levelSelect}
+              <button type="button" className="primary" onClick={() => playComputer(lastTc, color)}>
+                🤖 Play the computer ({findTimeControl(lastTc)?.label ?? lastTc})
+              </button>
+            </div>
+          </div>
+        )}
         {seeks.length === 0 ? (
           <p className="muted">No open seeks yet. Create one, or wait for someone to join.</p>
         ) : (

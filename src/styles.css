@@ -1790,3 +1790,122 @@ button.daily-button {
   background: #d9822b;
   transition: width 150ms ease-out;
 }
+
+/* ---------- play the computer from the lobby ---------- */
+
+.computer-offer {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+}
+
+.computer-offer .row {
+  flex-wrap: wrap;
+}
+
+/* ---------- game review ---------- */
+
+.review-mark {
+  margin-left: 3px;
+  font-size: 0.8em;
+  font-weight: 800;
+}
+
+.review-mark.best {
+  color: #2e9d5b;
+}
+
+.review-mark.excellent {
+  color: #4aa66d;
+}
+
+.review-mark.good {
+  color: #7ea98c;
+}
+
+.review-mark.inaccuracy {
+  color: #c9a227;
+}
+
+.review-mark.mistake {
+  color: #d9822b;
+}
+
+.review-mark.blunder {
+  color: var(--danger);
+}
+
+.review-progress {
+  height: 8px;
+  margin: 6px 0 10px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.review-progress > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease-out;
+}
+
+.review-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.review-table th,
+.review-table td {
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.review-table td {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-table tr.accuracy td {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.review-table td.jump button {
+  padding: 2px 8px;
+}
+
+.review-verdict {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 4px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+}
+
+.review-verdict p {
+  margin: 0 0 4px;
+}
+
+.review-verdict.best,
+.review-verdict.excellent,
+.review-verdict.good {
+  border-left-color: #2e9d5b;
+}
+
+.review-verdict.inaccuracy {
+  border-left-color: #c9a227;
+}
+
+.review-verdict.mistake {
+  border-left-color: #d9822b;
+}
+
+.review-verdict.blunder {
+  border-left-color: var(--danger);
+}

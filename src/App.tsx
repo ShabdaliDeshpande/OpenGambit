@@ -7,6 +7,7 @@ import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
 import { ProfileView } from './components/account/ProfileView';
 import { opposite } from './chess/clock';
+import type { GameSetup } from './chess/game';
 import { useAccount } from './hooks/useAccount';
 import { useTheme } from './hooks/useTheme';
 import { useSoundSetting } from './hooks/useGameSounds';
@@ -33,6 +34,7 @@ export default function App() {
   const [analysisOrientation, setAnalysisOrientation] = useState<Color>('w');
   const [analysisRequest, setAnalysisRequest] = useState<{ pgn: string; nonce: number } | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [computerGame, setComputerGame] = useState<{ setup: GameSetup; n: number } | null>(null);
   const { theme, toggleTheme } = useTheme();
   const [soundOn, setSoundOn] = useSoundSetting();
   const account = useAccount();
@@ -129,6 +131,7 @@ export default function App() {
           active={tab === 'play'}
           orientation={playOrientation}
           setOrientation={setPlayOrientation}
+          request={computerGame}
           onAnalyse={pgn => {
             setAnalysisOrientation(playOrientation);
             analyse(pgn);
@@ -140,6 +143,10 @@ export default function App() {
           active={tab === 'online'}
           signedIn={!!me}
           myRatings={me?.ratings ?? null}
+          onPlayComputer={setup => {
+            setComputerGame(g => ({ setup, n: (g?.n ?? 0) + 1 }));
+            chooseTab('play');
+          }}
           onSignIn={() => setSigningIn(true)}
           onOpenProfile={openProfile}
           onAnalyse={analyse}

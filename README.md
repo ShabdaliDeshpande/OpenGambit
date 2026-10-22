@@ -192,6 +192,18 @@ Open **Puzzles** and pick **🔥 Streak** or **⚡ Storm**, or share a link: `?s
 
 Your best and today's best (UTC) for each mode are saved with your account and shown on your profile. Guests' bests are kept in the browser. Runs are scored in the browser, so, as on lila, there's no leaderboard for them: the server only rejects impossible scores.
 
+## Game review and playing the computer from the lobby
+
+**Game review.** On the analysis board, **📊 Review game** runs the engine over every position of the main line (up to 3 positions at once in Web Workers, 0.6 s each). Each move then gets a verdict: **★ Best**, **✓✓ Excellent**, **✓ Good**, **?! Inaccuracy**, **? Mistake** or **?? Blunder**.
+- **Where verdicts appear:** next to the moves in the move list, and in a table per player with their accuracy.
+- **On the selected move:** the review says what it was, the evaluation before and after, and the better move, with a **show it** link that plays it as a variation.
+- **Finding mistakes:** ◀ ▶ buttons jump between each player's inaccuracies and worse.
+- **Starting it:** a game sent from **Analyse this game** (Play or online) or from a profile is reviewed automatically.
+
+The verdicts follow lila's rules for bad moves: the drop in the mover's winning chances on a −1…1 curve is 0.1 for an inaccuracy, 0.2 for a mistake and 0.3 for a blunder. Walking into a forced mate, or letting one slip, is judged separately. Good moves are graded below that line: **best** is the engine's move or within 0.01, **excellent** under 0.04, **good** under 0.1. Accuracy uses lila's curve from the drop in win percentage, averaged with a harmonic mean. The engine is this app's own and fairly modest, so close calls can be off.
+
+**Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
+
 ## Deploying
 
 The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
@@ -222,6 +234,7 @@ src/
     pgn.ts        PGN reader and writer for trees (variations, comments, NAGs)
     analysisState.ts  reducer for the analysis board
     evalFormat.ts eval text, eval-bar share, and engine lines in SAN
+    review.ts     game review: winning chances, move verdicts (best … blunder), accuracy
   engine/
     board.ts      fast 0x88 move generator for the search (checked by perft), two Zobrist hashes
     search.ts     negamax with alpha-beta, transposition table, quiescence, killer moves,

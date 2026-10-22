@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { isWhiteMove, moveNumber, NAG_SYMBOLS, type TreeNode } from '../../analysis/tree';
+import { KIND_LABEL, KIND_MARK, type Kind } from '../../analysis/review';
 
 interface Props {
   root: TreeNode;
   path: string[];
   onSelect: (path: string[]) => void;
+  /** Game review verdicts, keyed by path (ids joined by spaces). */
+  marks?: ReadonlyMap<string, Kind>;
 }
 
 const samePath = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -14,7 +17,7 @@ const samePath = (a: readonly string[], b: readonly string[]) => a.length === b.
  * The move tree as text: main line in bold, variations in parentheses,
  * top-level variations on their own indented line. Comments are shown inline.
  */
-export function TreeView({ root, path, onSelect }: Props) {
+export function TreeView({ root, path, onSelect, marks }: Props) {
   const activeRef = useRef<HTMLButtonElement>(null);
   // block body on purpose: newer browsers return a Promise from scrollIntoView,
   // and an effect must not return anything but a cleanup function
@@ -24,6 +27,7 @@ export function TreeView({ root, path, onSelect }: Props) {
 
   const move = (node: TreeNode, nodePath: string[], forceNumber: boolean, main: boolean) => {
     const active = samePath(nodePath, path);
+    const mark = marks?.get(nodePath.join(' '));
     const number = isWhiteMove(node) ? `${moveNumber(node)}.` : forceNumber ? `${moveNumber(node)}...` : '';
     return [
       <button
@@ -36,6 +40,11 @@ export function TreeView({ root, path, onSelect }: Props) {
         {number && <span className="tree-num">{number}</span>}
         {node.san}
         {node.nags.length > 0 && <span className="tree-nag">{node.nags.map(n => NAG_SYMBOLS[n] ?? `$${n}`).join('')}</span>}
+        {mark && (
+          <span className={`review-mark ${mark}`} title={KIND_LABEL[mark]}>
+            {KIND_MARK[mark]}
+          </span>
+        )}
       </button>,
       node.comment.trim() ? (
         <span key={`${nodePath.join(' ')}-c`} className="tree-comment">
