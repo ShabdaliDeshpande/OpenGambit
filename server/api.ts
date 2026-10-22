@@ -187,6 +187,20 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         return startSession(req, res, found.user);
       }
 
+      if (path === '/api/puzzles/run') {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in to keep your best runs.');
+        const body = await readJson(req);
+        const mode = body.mode === 'streak' || body.mode === 'storm' ? body.mode : null;
+        if (!mode) throw new HttpError(400, 'Unknown run type.');
+        // runs are scored in the browser, so only plausible scores are kept (no leaderboard, as on lila)
+        const max = mode === 'streak' ? puzzles.size : 300;
+        if (!Number.isInteger(body.score) || (body.score as number) < 0 || (body.score as number) > max) throw new HttpError(400, 'That score isn’t possible.');
+        if (puzzleAttempts.blocked(user.id)) throw new HttpError(429, 'That’s a lot of puzzles! Take a short break.');
+        puzzleAttempts.fail(user.id);
+        return send(res, 200, await store.recordRun(user.id, mode, body.score as number));
+      }
+
       if (path === '/api/puzzles/attempt') {
         const user = await currentUser(req);
         if (!user) throw new HttpError(401, 'Sign in to get a puzzle rating.');
@@ -254,6 +268,12 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       return send(res, 200, { id: daily.id, date: new Date(today).toISOString().slice(0, 10), solved });
     }
 
+    if (path === '/api/puzzles/runs') {
+      const user = await currentUser(req);
+      if (!user) throw new HttpError(401, 'Sign in to keep your best runs.');
+      return send(res, 200, { runs: await store.runBests(user.id) });
+    }
+
     if (path === '/api/puzzles/dashboard') {
       const user = await currentUser(req);
       if (!user) throw new HttpError(401, 'Sign in to see your puzzle dashboard.');
@@ -274,6 +294,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         user: { id: user.id, username: user.username, createdAt: user.createdAt },
         ratings: publicRatings(await store.ratings(user.id), now()),
         puzzleRating: await puzzleRatingOf(user.id),
+        runs: await store.runBests(user.id),
         totalGames: await store.countGames(user.id),
         games,
       });

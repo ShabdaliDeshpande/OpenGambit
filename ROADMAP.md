@@ -62,3 +62,8 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Delete account: removes your sign-in, ratings and puzzle history. Your past games stay, but your name in them is replaced.
 - Leaderboards: the top rated players for each speed and for puzzles. Only established (non-provisional) ratings are listed.
 - Rating range on seeks: a signed-in seeker can limit who may accept, for example ±200 of their own rating.
+
+## Phase 10: Puzzle Streak & Storm (done)
+- Puzzle Streak: puzzles get harder as you go, there's no clock, and one wrong move ends the run. You can skip one move per run. Your best streak is kept.
+- Puzzle Storm: solve as many puzzles as you can in 3 minutes. Combos earn extra time and mistakes cost time. Your best score and day's best are kept.
+- Signed-in players' best runs are saved on the server and shown on their profile. Guests' bests are kept in the browser.

@@ -178,6 +178,20 @@ While a puzzle rating is new and provisional ("?"), it moves a lot: a couple of 
 
 Password changes and account deletion are protected like logins: a wrong current password counts as a failed login attempt.
 
+## Features (Phase 10: Puzzle Streak & Storm)
+
+Open **Puzzles** and pick **🔥 Streak** or **⚡ Storm**, or share a link: `?streak` or `?storm`.
+
+| | Streak | Storm |
+|---|---|---|
+| Goal | Solve as many puzzles in a row as you can. | Solve as many puzzles as you can in 3 minutes. |
+| Clock | None. | 3:00, starting with your first move. Combos of correct moves add time: +3 s at 5 in a row, +5 s at 12, +7 s at 20, +10 s at 30 and every 10 after. |
+| Mistakes | One wrong move ends the streak. **⏭ Skip** plays the right move for you, once per run. | A wrong move costs 10 seconds, breaks the combo and moves on to the next puzzle. |
+| Puzzles | Easiest first, getting harder, with a little shuffling within each rating band. | The same. |
+| After | Your score and personal best. | Score, moves, accuracy, best combo and mistakes, plus your best. |
+
+Your best and today's best (UTC) for each mode are saved with your account and shown on your profile. Guests' bests are kept in the browser. Runs are scored in the browser, so, as on lila, there's no leaderboard for them: the server only rejects impossible scores.
+
 ## Deploying
 
 The app is one Node process that serves the built files, the account API and the game WebSocket, so it needs a host that runs a long-lived server with WebSockets. Static-only hosts won't work for online play.
@@ -201,6 +215,7 @@ src/
     gameEnd.ts    end-of-game detection and result text
     game.ts       game state reducer, plus PGN export/import and FEN validation
     premove.ts    premove targets and checking a premove when the turn comes
+  puzzles/runs.ts  Streak and Storm rules: run order, the Storm clock, combo bonuses
     animation.ts  which pieces slide, and which sound a move makes
   analysis/     analysis board logic (pure, unit-tested)
     tree.ts       immutable move tree with variations, comments and glyphs

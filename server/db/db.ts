@@ -98,6 +98,13 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX puzzle_attempts_user ON puzzle_attempts(user_id, created_at);
   CREATE INDEX puzzle_attempts_puzzle ON puzzle_attempts(user_id, puzzle_id);`,
+  `CREATE TABLE puzzle_runs (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mode TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX puzzle_runs_user ON puzzle_runs(user_id, mode, score);`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

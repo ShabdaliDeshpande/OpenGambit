@@ -54,6 +54,7 @@ export interface Profile {
   user: { id: string; username: string; createdAt: number };
   ratings: Record<Category, PublicRating>;
   puzzleRating: ShownRatingWithDeviation;
+  runs?: RunBests;
   totalGames: number;
   games: PublicGame[];
 }
@@ -121,6 +122,11 @@ export const submitPuzzleAttempt = (id: string, win: boolean, moves: { from: str
   call<PuzzleResult>('/api/puzzles/attempt', { id, win, moves, ...(theme ? { theme } : {}) });
 export const fetchDailyPuzzle = () => call<{ id: string; date: string; solved: boolean }>('/api/puzzles/daily');
 export const fetchPuzzleDashboard = async () => (await call<{ dashboard: PuzzleDashboardData }>('/api/puzzles/dashboard')).dashboard;
+
+export type RunMode = 'streak' | 'storm';
+export type RunBests = Record<RunMode, { best: number; today: number }>;
+export const submitRun = (mode: RunMode, score: number) => call<RunBests & { newBest: boolean }>('/api/puzzles/run', { mode, score });
+export const fetchRuns = async () => (await call<{ runs: RunBests }>('/api/puzzles/runs')).runs;
 
 export const changePassword = (current: string, password: string) => call<{ ok: true }>('/api/account/password', { current, password });
 export const deleteAccount = (current: string, confirm: string) => call<{ user: null }>('/api/account/delete', { current, confirm });

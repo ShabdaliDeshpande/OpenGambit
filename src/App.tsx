@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Color } from 'chess.js';
 import { PlayView } from './components/PlayView';
 import { AnalysisView } from './components/analysis/AnalysisView';
-import { linkedPuzzle, PuzzleView } from './components/puzzles/PuzzleView';
+import { linkedPuzzle, linkedPuzzleMode, PuzzleView } from './components/puzzles/PuzzleView';
 import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
 import { ProfileView } from './components/account/ProfileView';
@@ -27,7 +27,7 @@ function linkedProfile(): string | null {
 export default function App() {
   const [profileName, setProfileName] = useState<string | null>(linkedProfile);
   const [tab, setTab] = useState<Tab>(() =>
-    linkedProfile() ? 'profile' : linkedOnline() ? 'online' : linkedPuzzle() ? 'puzzles' : 'play',
+    linkedProfile() ? 'profile' : linkedOnline() ? 'online' : linkedPuzzle() || linkedPuzzleMode() ? 'puzzles' : 'play',
   );
   const [playOrientation, setPlayOrientation] = useState<Color>('w');
   const [analysisOrientation, setAnalysisOrientation] = useState<Color>('w');

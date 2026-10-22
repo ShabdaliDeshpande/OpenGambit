@@ -1687,3 +1687,106 @@ button.daily-button {
 .range-field {
   margin-bottom: 8px;
 }
+
+/* ---------- puzzle streak and storm ---------- */
+
+.puzzle-views {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.puzzle-views button {
+  padding-left: 4px;
+  padding-right: 4px;
+  font-size: 14px;
+}
+
+.run-switch {
+  max-width: 520px;
+  margin-bottom: 12px;
+}
+
+.run-panel h2 {
+  margin-top: 0;
+}
+
+.run-score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.run-score .stat-value {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.run-panel.over {
+  border-color: var(--accent);
+}
+
+.run-panel ul {
+  padding-left: 18px;
+}
+
+.storm-clock-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.storm-clock {
+  font: 700 40px/1 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.storm-clock.low {
+  color: var(--danger);
+}
+
+.storm-flash {
+  font-size: 22px;
+  font-weight: 800;
+  animation: storm-flash 1.2s ease-out forwards;
+}
+
+.storm-flash.up {
+  color: #2e9d5b;
+}
+
+.storm-flash.down {
+  color: var(--danger);
+}
+
+@keyframes storm-flash {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.combo {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  font-weight: 600;
+}
+
+.combo-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.combo-bar > div {
+  height: 100%;
+  background: #d9822b;
+  transition: width 150ms ease-out;
+}

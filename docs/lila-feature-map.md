@@ -250,3 +250,16 @@ lila's Swiss pairing runs the external bbpPairings program, which isn't in the c
 - **Seek rating ranges:** two seeks pair only if each rating fits the other's range. A seek with a range can't be taken by a guest, who has no rating.
 
 **Designed independently:** password change (signs out other sessions) and account deletion (games kept with the name replaced). lila's account closing works differently, and wasn't studied here.
+
+## 12. Puzzle Streak & Storm (Phase 10)
+
+**Sources.** I read `ui/storm/src/config.ts`, `ui/lib/src/puz/combo.ts`, `ui/puzzle/src/streak.ts`, `modules/storm/src/main/StormSelector.scala`, `StormHigh.scala`, `StormForm.scala` and `modules/puzzle/src/main/PuzzleStreak.scala`, plus the streak strings in `translation/source/puzzle.xml`, all in the local clone.
+
+**Behaviour taken over (as rules and numbers, not code):**
+- **Storm clock:** a 3-minute clock and a 10-second penalty for a wrong move.
+- **Combo bonuses:** +3 s at 5, +5 at 12, +7 at 20 and +10 at 30, then +10 every 10 more.
+- **Storm mistakes:** a wrong move resets the combo and moves on to the next puzzle.
+- **Storm scores:** the score is puzzles solved. Best scores are kept per day and all time, with no leaderboard because scores come from the browser.
+- **Streak:** puzzles get harder, there's no clock, one wrong move ends it, and there's one skip per run.
+
+**Not taken over:** lila's large rating-bucketed puzzle pools (this app has 65 built-in puzzles, plus any imported set), weekly and monthly highs, and the signed run data lila uses to check runs.

@@ -23,6 +23,8 @@ import type { Puzzle } from '../../puzzles/types';
 import { useKeyboardNav } from '../../hooks/useKeyboardNav';
 import { diffText, fetchDailyPuzzle, ratingText, submitPuzzleAttempt, type Me, type PuzzleResult } from '../../account/api';
 import { PuzzleDashboard } from './PuzzleDashboard';
+import { StormView } from './StormView';
+import { StreakView } from './StreakView';
 
 const STATS_KEY = 'chess-app:puzzle-stats';
 const IMPORTED_URL = '/puzzles/imported.json';
@@ -50,6 +52,12 @@ export function linkedPuzzle(): Puzzle | null {
   return (id && BUILTIN_PUZZLES.find(p => p.id === id)) || null;
 }
 
+/** A `?streak` or `?storm` link opens that mode. */
+export function linkedPuzzleMode(): 'streak' | 'storm' | null {
+  const q = new URLSearchParams(window.location.search);
+  return q.has('storm') ? 'storm' : q.has('streak') ? 'streak' : null;
+}
+
 type Source = 'all' | 'builtin' | 'imported';
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
@@ -72,7 +80,7 @@ interface Props {
 }
 
 export function PuzzleView({ active, onAnalyse, me, onRated, onSignIn }: Props) {
-  const [view, setView] = useState<'train' | 'dashboard'>('train');
+  const [view, setView] = useState<'train' | 'streak' | 'storm' | 'dashboard'>(() => linkedPuzzleMode() ?? 'train');
   // signed in: difficulty is an offset from your puzzle rating
   const [offset, setOffset] = useState(0);
   const [result, setResult] = useState<{ attempt: number; value: PuzzleResult | null; error: string | null } | null>(null);
@@ -249,6 +257,12 @@ export function PuzzleView({ active, onAnalyse, me, onRated, onSignIn }: Props) 
       <button type="button" role="radio" aria-checked={view === 'train'} className={view === 'train' ? 'on' : ''} onClick={() => setView('train')}>
         🧩 Train
       </button>
+      <button type="button" role="radio" aria-checked={view === 'streak'} className={view === 'streak' ? 'on' : ''} onClick={() => setView('streak')}>
+        🔥 Streak
+      </button>
+      <button type="button" role="radio" aria-checked={view === 'storm'} className={view === 'storm' ? 'on' : ''} onClick={() => setView('storm')}>
+        ⚡ Storm
+      </button>
       <button
         type="button"
         role="radio"
@@ -261,6 +275,19 @@ export function PuzzleView({ active, onAnalyse, me, onRated, onSignIn }: Props) 
       </button>
     </div>
   );
+
+  const runPuzzles = [...BUILTIN_PUZZLES, ...imported];
+  if (view === 'streak' || view === 'storm')
+    return (
+      <div className="run-page">
+        <div className="run-switch">{viewSwitch}</div>
+        {view === 'streak' ? (
+          <StreakView puzzles={runPuzzles} me={me} onSignIn={onSignIn} />
+        ) : (
+          <StormView puzzles={runPuzzles} me={me} onSignIn={onSignIn} />
+        )}
+      </div>
+    );
 
   if (view === 'dashboard' && me)
     return (

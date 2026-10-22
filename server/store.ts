@@ -113,6 +113,9 @@ export interface PuzzleResult {
   diff: number | null;
 }
 
+export type RunMode = 'streak' | 'storm';
+export type RunBests = Record<RunMode, { best: number; today: number }>;
+
 export interface PuzzleAttempt {
   puzzleId: string;
   first: boolean;
@@ -484,6 +487,26 @@ export class Store {
       );
       return { first: !seen, rating: after, diff };
     });
+  }
+
+  /** Saves a finished Streak or Storm run and returns the bests (all time and today, UTC). */
+  async recordRun(userId: string, mode: RunMode, score: number): Promise<RunBests & { newBest: boolean }> {
+    const before = await this.runBests(userId);
+    await this.db.run('INSERT INTO puzzle_runs (user_id, mode, score, created_at) VALUES (?, ?, ?, ?)', [userId, mode, score, this.now()]);
+    const after = await this.runBests(userId);
+    return { ...after, newBest: score > 0 && score > before[mode].best };
+  }
+
+  async runBests(userId: string): Promise<RunBests> {
+    const today = Math.floor(this.now() / 86_400_000) * 86_400_000;
+    const rows = await this.db.all<{ mode: RunMode; best: number | null; today: number | null }>(
+      `SELECT mode, MAX(score) AS best, MAX(CASE WHEN created_at >= ? THEN score END) AS today, COUNT(*) AS runs
+       FROM puzzle_runs WHERE user_id = ? GROUP BY mode`,
+      [today, userId],
+    );
+    const out: RunBests = { streak: { best: 0, today: 0 }, storm: { best: 0, today: 0 } };
+    for (const r of rows) if (r.mode in out) out[r.mode] = { best: Number(r.best ?? 0), today: Number(r.today ?? 0) };
+    return out;
   }
 
   /** A player's puzzle attempts, newest first. */

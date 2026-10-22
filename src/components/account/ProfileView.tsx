@@ -150,6 +150,15 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccoun
               <span className="muted small">±{profile.puzzleRating.deviation}</span>
             </div>
           )}
+          {profile.runs && (
+            <div className="rating-card">
+              <span className="stat-label">🔥 Streak · ⚡ Storm</span>
+              <span className="stat-value">
+                {profile.runs.streak.best} · {profile.runs.storm.best}
+              </span>
+              <span className="muted small">best runs</span>
+            </div>
+          )}
         </div>
         <p className="muted small">
           Ratings use Glicko-2. A “?” means the rating is still provisional: its uncertainty (±) is 110 or more.
