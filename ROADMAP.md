@@ -67,3 +67,50 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Puzzle Streak: puzzles get harder as you go, there's no clock, and one wrong move ends the run. You can skip one move per run. Your best streak is kept.
 - Puzzle Storm: solve as many puzzles as you can in 3 minutes. Combos earn extra time and mistakes cost time. Your best score and day's best are kept.
 - Signed-in players' best runs are saved on the server and shown on their profile. Guests' bests are kept in the browser.
+
+## Phase 11: Game Review (done)
+- Every move gets a class: brilliant, great, best, excellent, good, book, inaccuracy, mistake, miss or blunder. The bad-move rules are lila's; the others are our own and are listed in `docs/lila-feature-map.md` §13. Book moves need the Phase 13 data.
+- Accuracy % per side (lila's volatility-weighted formula), an estimated performance rating (labelled a rough estimate), and an eval graph that jumps to a move when clicked.
+- Key moments, and summaries for the opening, middlegame and endgame.
+- Retry your mistakes: try again from the position before each one.
+- Explanations in plain language, built from rules without an LLM.
+- Signed-in players' reviews are saved with the game and shown in their profile's game history.
+- Builds on commit 569e324, which has the first version of the review.
+
+## Phase 12: Analysis settings and a stronger engine (planned)
+- Settings: search by time or depth, infinite analysis, 1–5 lines, worker threads, threat mode, arrows on or off.
+- A stronger engine, still our own code, measured with an engine-vs-engine match script.
+- Optional server-side analysis queue (off by default).
+- Right-click arrows and circles, kept in PGN as `[%cal]` and `[%csl]`.
+- **Decided:** the opening book moves to Phase 13, which imports the same games.
+
+## Phase 13: Opening Explorer (planned)
+- For each move: games, white/draw/black %, average rating.
+- Tabs: Masters (imported), OpenGambit games, and My games (filters by colour, speed and date).
+- Opening name and ECO code; book moves in the review; an opening book for the engine.
+- Importers the user runs on files they download: `npm run explorer:import -- path/to/games.pgn` and `npm run openings:import -- path/to/openings.tsv`.
+- Stretch goal: endgame tablebases from Syzygy files the user supplies. **Decided:** the rest of the phase comes first, and I'll ask before cutting it.
+
+## Phase 14: Insights (planned)
+- Rating history; results by colour, opening, time control, time of day and opponent rating.
+- Accuracy over time and per phase; blunders per game (from saved reviews).
+- Average time per move and time trouble. Per-move clock times are stored from this phase on.
+- Most-played openings.
+- Needs an account.
+
+## Phase 15: Learning (planned)
+- Original interactive lessons, timed drills, and endgame practice against the engine.
+- An explanation for the daily puzzle.
+- A video library read from a JSON file you fill in.
+- Free for guests; progress kept in the browser, and on the account when signed in.
+
+## Phase 16: Bots (planned)
+- A gallery of original named bots, each with a rating, style, repertoire, avatar and chat lines.
+- Assisted mode with hints, takebacks, eval, threats and best move, each toggleable. Challenge mode has no help.
+
+## Phase 17: Daily chess and flair (planned)
+- Correspondence games at 1, 2, 3, 5, 7 or 14 days per move, stored in the database.
+- Notifications, many games at once, and conditional moves.
+- Vacation days.
+- Daily Arena and Swiss tournaments. **Decided:** correspondence tournaments played at days-per-move time controls.
+- Custom flair (an emoji next to your name).

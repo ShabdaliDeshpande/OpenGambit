@@ -12,6 +12,7 @@ import { playSound } from '../../sound/sounds';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import { clockMs, fenAfter, onlinePgn, replay, withPending } from '../../online/view';
 import { diffText, ratingText } from '../../account/api';
+import type { AnalysedGame } from '../analysis/AnalysisView';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 const seconds = (ms: number) => Math.ceil(ms / 1000);
@@ -22,7 +23,7 @@ interface Props {
   client: OnlineClient;
   state: OnlineState;
   onBack: () => void;
-  onAnalyse: (pgn: string) => void;
+  onAnalyse: (pgn: string, game?: AnalysedGame) => void;
   onOpenProfile: (name: string) => void;
   backLabel: string;
 }
@@ -323,7 +324,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
               {backLabel}
             </button>
             {!playing && (
-              <button type="button" className="analyse-game" onClick={() => onAnalyse(onlinePgn(snap))} disabled={snap.moves.length === 0}>
+              <button type="button" className="analyse-game" onClick={() => onAnalyse(onlinePgn(snap), { id: snap.id, moves: snap.moves, canSave: snap.you !== null && !playing })} disabled={snap.moves.length === 0}>
                 🔍 Analyse this game
               </button>
             )}

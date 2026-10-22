@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { judge, summarize, winningChances, type Score } from './review';
+import { classify, judge, winningChances, type Score } from './review';
 
 const cp = (v: number): Score => ({ cp: v });
 
@@ -59,16 +59,53 @@ describe('judging moves', () => {
   });
 });
 
-describe('summary', () => {
-  it('counts each kind and averages accuracy per side', () => {
-    const s = summarize([
-      { color: 'w', judgement: judge(cp(0), cp(0), 'w', true) },
-      { color: 'b', judgement: judge(cp(0), cp(300), 'b', false) },
-      { color: 'w', judgement: judge(cp(300), cp(300), 'w', true) },
-    ]);
-    expect(s.w.counts).toMatchObject({ best: 2, blunder: 0 });
-    expect(s.b.counts.blunder).toBe(1);
-    expect(s.w.accuracy).toBeGreaterThan(95);
-    expect(s.b.accuracy).toBeLessThan(40);
+describe('full classes', () => {
+  const base = { mover: 'w' as const, playedBest: false };
+
+  it('marks opening theory as book, whatever the engine thinks', () => {
+    expect(classify({ ...base, before: cp(30), after: cp(-80), book: true }).kind).toBe('book');
+  });
+
+  it('calls a failure to punish the opponent’s mistake a miss', () => {
+    // Black just blundered; White gives part of it back (an inaccuracy on its own)
+    expect(classify({ ...base, before: cp(300), after: cp(180), previous: 'blunder' }).kind).toBe('miss');
+    // the same move after a normal opponent move is just an inaccuracy
+    expect(classify({ ...base, before: cp(300), after: cp(180), previous: 'good' }).kind).toBe('inaccuracy');
+    // a blunder stays a blunder
+    expect(classify({ ...base, before: cp(300), after: cp(-300), previous: 'blunder' }).kind).toBe('blunder');
+  });
+
+  it('calls a lost forced mate a miss while still clearly winning', () => {
+    expect(classify({ ...base, before: { mate: 3 }, after: cp(1500) }).kind).toBe('miss');
+  });
+
+  it('calls a sacrifice the engine likes brilliant', () => {
+    expect(classify({ ...base, before: cp(40), after: cp(60), playedBest: true, offered: 3 }).kind).toBe('brilliant');
+    // giving up material when already completely winning is just best
+    expect(classify({ ...base, before: cp(900), after: cp(950), playedBest: true, offered: 3 }).kind).toBe('best');
+    // a sacrifice that leaves you worse is not brilliant, even if it is the best try
+    expect(classify({ ...base, before: cp(-200), after: cp(-200), playedBest: true, offered: 3 }).kind).toBe('best');
+    // only material counts: a pawn is not a sacrifice
+    expect(classify({ ...base, before: cp(40), after: cp(40), playedBest: true, offered: 1 }).kind).toBe('best');
+  });
+
+  it('calls the only move that holds great', () => {
+    // everything else loses at least 0.2 of the winning chances
+    expect(classify({ ...base, before: cp(0), after: cp(0), playedBest: true, second: cp(-250) }).kind).toBe('great');
+    expect(classify({ ...base, before: cp(0), after: cp(0), playedBest: true, second: cp(-20) }).kind).toBe('best');
+    // finding an equally good second choice is not great
+    expect(classify({ ...base, before: cp(0), after: cp(0), playedBest: false, second: cp(-250) }).kind).toBe('best');
+  });
+
+  it('only works out the sacrifice when it matters', () => {
+    let calls = 0;
+    const offered = () => {
+      calls++;
+      return 3;
+    };
+    classify({ ...base, before: cp(300), after: cp(-300), offered });
+    expect(calls).toBe(0);
+    classify({ ...base, before: cp(0), after: cp(0), playedBest: true, offered });
+    expect(calls).toBe(1);
   });
 });

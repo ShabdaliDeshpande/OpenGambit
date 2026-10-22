@@ -192,15 +192,36 @@ Open **Puzzles** and pick **🔥 Streak** or **⚡ Storm**, or share a link: `?s
 
 Your best and today's best (UTC) for each mode are saved with your account and shown on your profile. Guests' bests are kept in the browser. Runs are scored in the browser, so, as on lila, there's no leaderboard for them: the server only rejects impossible scores.
 
-## Game review and playing the computer from the lobby
+## Features (Phase 11: Game Review)
 
-**Game review.** On the analysis board, **📊 Review game** runs the engine over every position of the main line (up to 3 positions at once in Web Workers, 0.6 s each). Each move then gets a verdict: **★ Best**, **✓✓ Excellent**, **✓ Good**, **?! Inaccuracy**, **? Mistake** or **?? Blunder**.
-- **Where verdicts appear:** next to the moves in the move list, and in a table per player with their accuracy.
-- **On the selected move:** the review says what it was, the evaluation before and after, and the better move, with a **show it** link that plays it as a variation.
-- **Finding mistakes:** ◀ ▶ buttons jump between each player's inaccuracies and worse.
-- **Starting it:** a game sent from **Analyse this game** (Play or online) or from a profile is reviewed automatically.
+On the analysis board, **📊 Review game** runs the engine over every position of the main line: up to 3 positions at once in Web Workers, 0.6 s each, with two lines per position. A game sent from **Analyse this game** (Play or online) or from a profile is reviewed automatically.
 
-The verdicts follow lila's rules for bad moves: the drop in the mover's winning chances on a −1…1 curve is 0.1 for an inaccuracy, 0.2 for a mistake and 0.3 for a blunder. Walking into a forced mate, or letting one slip, is judged separately. Good moves are graded below that line: **best** is the engine's move or within 0.01, **excellent** under 0.04, **good** under 0.1. Accuracy uses lila's curve from the drop in win percentage, averaged with a harmonic mean. The engine is this app's own and fairly modest, so close calls can be off.
+| | What you get |
+|---|---|
+| Move classes | Every move gets one of ten classes: **!! Brilliant**, **! Great**, **★ Best**, **✓✓ Excellent**, **✓ Good**, **≡ Book**, **?! Inaccuracy**, **? Mistake**, **× Miss** or **?? Blunder**. The mark appears next to the move in the move list. |
+| Summary | Per player: accuracy, an estimated performance, and how many moves fell in each class. ◀ ▶ buttons jump between a player's errors. |
+| Eval graph | White's chances over the whole game, with dots on errors and brilliant or great moves, and lines where the middlegame and endgame start. Click anywhere to jump to that move. |
+| Phases | Accuracy per player in the opening, middlegame and endgame, and one sentence each: where they played best and their costliest move. |
+| Key moments | Up to six turning points (the biggest errors, plus brilliant and great moves). Click one to go there. |
+| Explanations | The selected move's class, the evaluation before and after, and a plain-language explanation built from rules, with no AI model. For example: "Qg4 is a blunder. It leaves your queen on g4 hanging: Bxg4 wins it. Best was exd5, which keeps the material level." **Play … on the board** adds the better move as a variation. |
+| Retry mistakes | **🔁 Retry …'s mistakes** goes back to the position before each of that player's errors. Find a better move. The engine's move counts at once; any other move counts if it keeps the evaluation within 0.04 of the best. You can try again, see the answer, or skip. The engine stays hidden while you try. |
+| Saved reviews | When you review your own finished online game while signed in, the review is saved with the game. Your profile's game history then shows both players' accuracy, and the game opens with its saved review instead of running the engine again. |
+
+**How moves are classed:**
+- **Inaccuracy, mistake, blunder:** lila's rules. The drop in the mover's winning chances (on a −1…1 curve) is at least 0.1, 0.2 or 0.3. Walking into a forced mate, or letting one slip, is judged separately.
+- **Book:** a move that's in imported master games. Until the Opening Explorer (Phase 13) brings those, no move is marked book.
+- **Miss:** your opponent's last move was a mistake or blunder, and your move gives back at least 0.1 of what it offered, without being a blunder. A lost forced mate while still clearly winning is also a miss.
+- **Brilliant:** the engine's move (or within 0.02 of it) that gives up material: by static exchange, at least a piece for a pawn. You must not already have been completely winning, and not be worse after it.
+- **Great:** the engine's move when its second choice would lose at least 0.2. In other words, the only move that holds.
+- **Best, excellent, good:** the engine's move or a drop of 0.01 or less; under 0.04; under 0.1.
+
+**How the summary is worked out:**
+- **Accuracy:** lila's formulas. Each move scores 0–100 from the drop in win percentage. The game score is the average of a volatility-weighted mean (moves in sharp positions count more) and the harmonic mean.
+- **Phases:** this app's own rule, because lila's is in a library that isn't in its repository. The middlegame starts once most minor pieces have left their starting squares, or at move 15. The endgame starts when the pieces other than pawns and kings add up to 26 or less (queen 9, rook 5, bishop or knight 3).
+- **Estimated performance:** a fixed curve from accuracy to a rating, nudged a quarter of the way towards the opponent's rating when it's known (at most 200 points). It's a rough estimate, not a rating, and is left out below 8 moves.
+- **Saved reviews:** the server checks a saved review against the stored game and works out the accuracy itself from the scores. It keeps the review that gave the engine more time.
+
+## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
 
@@ -234,7 +255,15 @@ src/
     pgn.ts        PGN reader and writer for trees (variations, comments, NAGs)
     analysisState.ts  reducer for the analysis board
     evalFormat.ts eval text, eval-bar share, and engine lines in SAN
-    review.ts     game review: winning chances, move verdicts (best … blunder), accuracy
+    accuracy.ts   winning chances and accuracy (lila's formulas); also used by the server
+    review.ts     move classes, from lila's bad-move rules plus brilliant, great, best … miss
+    gameReview.ts a whole game's review: classes, accuracy, phases, performance, key moments
+    material.ts   static exchange, hanging pieces, forks and pins
+    explain.ts    plain-language explanations of moves, from rules
+    divider.ts    opening / middlegame / endgame split
+    performance.ts  the rough performance estimate
+    retry.ts      retry-your-mistakes rules
+    reviewData.ts the saved review format, checked by the server; savedReview.ts converts to it
   engine/
     board.ts      fast 0x88 move generator for the search (checked by perft), two Zobrist hashes
     search.ts     negamax with alpha-beta, transposition table, quiescence, killer moves,
@@ -242,7 +271,7 @@ src/
     engine.worker.ts  runs a move search or an analysis in a Web Worker
   components/   Board (with arrows), Piece, PromotionPicker, ClockDisplay, MoveList, GameControls,
                 SetupPanel, PgnFenPanel, PlayView
-    analysis/     AnalysisView, EvalBar, EngineLines, TreeView, NodeTools
+    analysis/     AnalysisView, EvalBar, EngineLines, TreeView, NodeTools, ReviewPanel, EvalGraph
   hooks/        useEngine, useAnalysis, useKeyboardNav, useTheme, useOnline, useAccount, useGameSounds
   sound/sounds.ts  synthesised game sounds (Web Audio) and the on/off setting
   online/       client side of online play
@@ -274,6 +303,7 @@ public/         manifest.webmanifest, icons/, sw.js (service worker for install 
 scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
 scripts/smoke-puzzles.ts  end-to-end check of puzzle ratings, the dashboard and the daily puzzle
 scripts/smoke-account-settings.ts  end-to-end check of password change, leaderboard and account deletion
+scripts/smoke-review.ts  end-to-end check: two accounts play, one saves a review, accuracy shows in both histories
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -339,6 +369,11 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **The clock follows a simplified start rule.** White's first move starts Black's clock, and no increment is added for that first move.
 - **Pieces depend on system fonts.** They're Unicode glyphs, so they look slightly different between operating systems.
 - **The engine is modest.** It has no opening book or advanced pruning; level 8 is roughly club-player strength.
+- **Review verdicts are only as good as a 0.6-second search** by that engine. Close calls, and deep sacrifices it doesn't see through, can be misjudged. Brilliant moves are found by static exchange, so a sacrifice that only pays off much later may be called best instead.
+- **No move is marked book yet.** That needs imported master games, which come with the Opening Explorer (Phase 13).
+- **Explanations are rule-based.** They name material, hanging pieces, mates, forks, pins and similar concrete reasons, and fall back to "makes your position worse" for quieter positional errors.
+- **Only signed-in players' own online games keep their review.** Reviews of games against the computer, imported PGNs or a guest's games stay on the board until you leave it.
+- **The performance estimate is a rough guide,** from a fixed curve chosen for this app, not measured from rated players.
 - **The Play screen's PGN import keeps only the main line.** The Analysis board keeps everything.
 - **Secondary engine lines are shallower than the best line,** and their continuations can be short. Each extra line is searched separately with the remaining moves.
 - **Analysis stops after 15 seconds per position;** it isn't infinite.

@@ -105,6 +105,17 @@ export const MIGRATIONS: string[] = [
     created_at BIGINT NOT NULL
   );
   CREATE INDEX puzzle_runs_user ON puzzle_runs(user_id, mode, score);`,
+  `CREATE TABLE game_reviews (
+    game_id TEXT PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
+    data TEXT NOT NULL,
+    white_accuracy DOUBLE PRECISION,
+    black_accuracy DOUBLE PRECISION,
+    white_performance INTEGER,
+    black_performance INTEGER,
+    engine_ms INTEGER NOT NULL,
+    reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at BIGINT NOT NULL
+  );`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

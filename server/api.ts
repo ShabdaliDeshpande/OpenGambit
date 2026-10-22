@@ -17,6 +17,7 @@ import { clientIp, sameOrigin } from './transport.ts';
 import { buildDashboard } from './puzzleDashboard.ts';
 import { PuzzleCatalogue, solves, themeWeight } from './puzzles.ts';
 import type { UciMove } from '../src/puzzles/types.ts';
+import { checkReview, reviewStats } from '../src/analysis/reviewData.ts';
 import type { Account } from './types.ts';
 
 export interface ApiOptions {
@@ -30,9 +31,13 @@ export interface ApiOptions {
   puzzles?: PuzzleCatalogue;
   /** Puzzle attempts allowed per player per 10 minutes. */
   maxPuzzleAttempts?: number;
+  /** Saved reviews allowed per player per 10 minutes. */
+  maxReviewWrites?: number;
 }
 
 const MAX_BODY = 4096;
+/** A review carries a score, best move and short line for every position. */
+const MAX_REVIEW_BODY = 256 * 1024;
 const GAME_ID = /^[A-Za-z0-9]{1,16}$/;
 
 class HttpError extends Error {
@@ -48,7 +53,7 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
   res.end(JSON.stringify(body));
 }
 
-function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+function readJson(req: IncomingMessage, maxBody = MAX_BODY): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     if (!(req.headers['content-type'] ?? '').startsWith('application/json')) return reject(new HttpError(415, 'Expected JSON.'));
     let size = 0;
@@ -56,11 +61,11 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       // keep reading (and dropping) the rest, so the 413 reply can still be sent
-      if (size <= MAX_BODY) chunks.push(chunk);
-      else if (size > MAX_BODY * 16) req.destroy();
+      if (size <= maxBody) chunks.push(chunk);
+      else if (size > maxBody * 16) req.destroy();
     });
     req.on('end', () => {
-      if (size > MAX_BODY) return reject(new HttpError(413, 'Request too large.'));
+      if (size > maxBody) return reject(new HttpError(413, 'Request too large.'));
       try {
         const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
         if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
@@ -106,6 +111,7 @@ export function publicGame(g: StoredGame, withMoves = false) {
     startedAt: g.startedAt,
     endedAt: g.endedAt,
     ...(withMoves ? { moves: g.moves } : {}),
+    ...(g.review !== undefined ? { review: g.review } : {}),
   };
 }
 
@@ -124,6 +130,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   const signups = new LoginLimiter(options.maxSignupsPerHour ?? 5, 60 * 60_000, now);
   const puzzles = options.puzzles ?? PuzzleCatalogue.load();
   const puzzleAttempts = new LoginLimiter(options.maxPuzzleAttempts ?? 120, 10 * 60_000, now);
+  const reviewWrites = new LoginLimiter(options.maxReviewWrites ?? 30, 10 * 60_000, now);
 
   const puzzleRatingOf = async (userId: string) => {
     const g = currentGlicko(await store.puzzleRating(userId), now());
@@ -248,6 +255,33 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         return send(res, 200, { user: null }, { 'set-cookie': clearedSessionCookie(isHttps(req, trustProxy)) });
       }
 
+      const reviewPost = /^\/api\/games\/([^/]+)\/review$/.exec(path);
+      if (reviewPost) {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in to save reviews with your games.');
+        const id = reviewPost[1]!;
+        const game = GAME_ID.test(id) ? await store.game(id) : undefined;
+        if (!game) throw new HttpError(404, 'No such game.');
+        if (game.whiteId !== user.id && game.blackId !== user.id) throw new HttpError(403, 'Only the players can save a review of this game.');
+        if (reviewWrites.blocked(user.id)) throw new HttpError(429, 'That’s a lot of reviews. Try again in a few minutes.');
+        const body = await readJson(req, MAX_REVIEW_BODY);
+        const review = checkReview(body.review, game.moves.length);
+        if (typeof review === 'string') throw new HttpError(400, review);
+        reviewWrites.fail(user.id);
+        // the server works out accuracy itself, from the scores; online games always start with White to move
+        const { accuracy, performance } = reviewStats(review, 'w', { w: game.whiteRating, b: game.blackRating });
+        const saved = await store.saveReview({
+          gameId: game.id,
+          review,
+          whiteAccuracy: accuracy.w,
+          blackAccuracy: accuracy.b,
+          whitePerformance: performance.w,
+          blackPerformance: performance.b,
+          reviewedBy: user.id,
+        });
+        return send(res, 200, { saved, accuracy: { white: accuracy.w, black: accuracy.b } });
+      }
+
       if (path === '/api/logout') {
         const token = readCookie(req.headers.cookie, SESSION_COOKIE);
         if (token) await store.deleteSession(token);
@@ -314,6 +348,15 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       const stored = GAME_ID.test(id) ? await store.tournament(id) : undefined;
       if (!stored) throw new HttpError(404, 'No such tournament.');
       return send(res, 200, { tournament: stored });
+    }
+
+    const reviewGet = /^\/api\/games\/([^/]+)\/review$/.exec(path);
+    if (reviewGet) {
+      const id = reviewGet[1]!;
+      const stored = GAME_ID.test(id) ? await store.game(id) : undefined;
+      if (!stored) throw new HttpError(404, 'No such game.');
+      const found = await store.review(id);
+      return send(res, 200, { review: found?.review ?? null });
     }
 
     const game = /^\/api\/games\/([^/]+)$/.exec(path);

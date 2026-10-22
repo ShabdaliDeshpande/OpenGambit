@@ -1,6 +1,8 @@
 // Calls to the account API (/api). The session lives in an HttpOnly cookie,
 // so the page never sees it.
 
+import type { StoredReview } from '../analysis/reviewData';
+
 export type Category = 'bullet' | 'blitz' | 'rapid' | 'classical';
 
 export const CATEGORIES: readonly Category[] = ['bullet', 'blitz', 'rapid', 'classical'];
@@ -48,6 +50,8 @@ export interface PublicGame {
   startedAt: number;
   endedAt: number;
   moves?: string[];
+  /** Accuracy per side when the game has a saved review. */
+  review?: { white: number | null; black: number | null } | null;
 }
 
 export interface Profile {
@@ -89,6 +93,9 @@ export const fetchProfile = (name: string) => call<Profile>(`/api/users/${encode
 export const fetchGames = async (name: string, before: number) =>
   (await call<{ games: PublicGame[] }>(`/api/users/${encodeURIComponent(name)}/games?before=${before}`)).games;
 export const fetchGame = async (id: string) => (await call<{ game: PublicGame }>(`/api/games/${encodeURIComponent(id)}`)).game;
+export const fetchReview = async (id: string) => (await call<{ review: StoredReview | null }>(`/api/games/${encodeURIComponent(id)}/review`)).review;
+export const saveReview = (id: string, review: StoredReview) =>
+  call<{ saved: boolean; accuracy: { white: number | null; black: number | null } }>(`/api/games/${encodeURIComponent(id)}/review`, { review });
 
 export interface PuzzleResult {
   /** False when you had tried this puzzle before: practice, not rated. */

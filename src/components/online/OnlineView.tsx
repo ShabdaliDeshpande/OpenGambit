@@ -4,6 +4,7 @@ import { Leaderboard } from './Leaderboard';
 import { Lobby } from './Lobby';
 import type { Me } from '../../account/api';
 import type { GameSetup } from '../../chess/game';
+import type { AnalysedGame } from '../analysis/AnalysisView';
 import { OnlineGame } from './OnlineGame';
 import { TournamentPage } from './TournamentPage';
 import { Tournaments } from './Tournaments';
@@ -39,7 +40,7 @@ interface Props {
   onPlayComputer: (setup: GameSetup) => void;
   onSignIn: () => void;
   onOpenProfile: (name: string) => void;
-  onAnalyse: (pgn: string) => void;
+  onAnalyse: (pgn: string, game?: AnalysedGame) => void;
 }
 
 export function OnlineView({ active, signedIn, myRatings, onPlayComputer, onSignIn, onOpenProfile, onAnalyse }: Props) {

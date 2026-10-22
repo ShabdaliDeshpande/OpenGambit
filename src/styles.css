@@ -1808,35 +1808,52 @@ button.daily-button {
 
 /* ---------- game review ---------- */
 
+:root {
+  --k-brilliant: #7b4fd6;
+  --k-great: #2f6fdb;
+  --k-best: #2e9d5b;
+  --k-excellent: #4aa66d;
+  --k-good: #7ea98c;
+  --k-book: #8c7a5b;
+  --k-inaccuracy: #b8921c;
+  --k-mistake: #d9822b;
+  --k-miss: #a0617a;
+  --k-blunder: #c23b3b;
+  --graph-white: #f4f4f1;
+  --graph-black: #3a4048;
+}
+
+:root[data-theme='dark'] {
+  --k-brilliant: #a07cf0;
+  --k-great: #5b8ff0;
+  --k-best: #4cc07d;
+  --k-excellent: #67c28a;
+  --k-good: #93b9a0;
+  --k-book: #b39f7c;
+  --k-inaccuracy: #e0bd45;
+  --k-mistake: #ee9c4c;
+  --k-miss: #c98aa3;
+  --k-blunder: #e06363;
+  --graph-white: #d9dcd6;
+  --graph-black: #2a2f36;
+}
+
 .review-mark {
   margin-left: 3px;
   font-size: 0.8em;
   font-weight: 800;
 }
 
-.review-mark.best {
-  color: #2e9d5b;
-}
-
-.review-mark.excellent {
-  color: #4aa66d;
-}
-
-.review-mark.good {
-  color: #7ea98c;
-}
-
-.review-mark.inaccuracy {
-  color: #c9a227;
-}
-
-.review-mark.mistake {
-  color: #d9822b;
-}
-
-.review-mark.blunder {
-  color: var(--danger);
-}
+.review-mark.brilliant { color: var(--k-brilliant); }
+.review-mark.great { color: var(--k-great); }
+.review-mark.best { color: var(--k-best); }
+.review-mark.excellent { color: var(--k-excellent); }
+.review-mark.good { color: var(--k-good); }
+.review-mark.book { color: var(--k-book); }
+.review-mark.inaccuracy { color: var(--k-inaccuracy); }
+.review-mark.mistake { color: var(--k-mistake); }
+.review-mark.miss { color: var(--k-miss); }
+.review-mark.blunder { color: var(--k-blunder); }
 
 .review-progress {
   height: 8px;
@@ -1852,11 +1869,42 @@ button.daily-button {
   transition: width 200ms ease-out;
 }
 
+.eval-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.eval-graph-black { fill: var(--graph-black); }
+.eval-graph-white { fill: var(--graph-white); }
+.eval-graph-mid { stroke: var(--muted); stroke-width: 0.4; stroke-dasharray: 2 2; }
+.eval-graph-line { fill: none; stroke: var(--accent); stroke-width: 1; }
+.eval-graph-division { stroke: var(--muted); stroke-width: 0.6; stroke-dasharray: 3 2; }
+.eval-graph-label { fill: var(--muted); font-size: 6px; }
+.eval-graph-current { stroke: var(--accent); stroke-width: 1.2; }
+.eval-graph-dot { stroke: var(--surface); stroke-width: 0.6; }
+.eval-graph-dot.brilliant { fill: var(--k-brilliant); }
+.eval-graph-dot.great { fill: var(--k-great); }
+.eval-graph-dot.inaccuracy { fill: var(--k-inaccuracy); }
+.eval-graph-dot.mistake { fill: var(--k-mistake); }
+.eval-graph-dot.miss { fill: var(--k-miss); }
+.eval-graph-dot.blunder { fill: var(--k-blunder); }
+
 .review-table {
   width: 100%;
   margin-top: 10px;
   border-collapse: collapse;
   font-size: 14px;
+}
+
+.review-table caption {
+  padding-bottom: 2px;
+  font-weight: 700;
+  text-align: left;
 }
 
 .review-table th,
@@ -1880,7 +1928,23 @@ button.daily-button {
   padding: 2px 8px;
 }
 
-.review-verdict {
+.phase-notes,
+.key-moments ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.key-moments h3 {
+  margin: 12px 0 0;
+  font-size: 15px;
+}
+
+.key-moments li {
+  margin: 2px 0;
+}
+
+.review-verdict,
+.retry-box {
   margin-top: 10px;
   padding: 8px 10px;
   border-left: 4px solid var(--border);
@@ -1888,24 +1952,27 @@ button.daily-button {
   background: var(--surface-2, rgba(127, 127, 127, 0.08));
 }
 
-.review-verdict p {
+.review-verdict p,
+.retry-box p {
   margin: 0 0 4px;
 }
 
+.review-verdict.brilliant { border-left-color: var(--k-brilliant); }
+.review-verdict.great { border-left-color: var(--k-great); }
 .review-verdict.best,
 .review-verdict.excellent,
-.review-verdict.good {
-  border-left-color: #2e9d5b;
-}
+.review-verdict.good { border-left-color: var(--k-best); }
+.review-verdict.book { border-left-color: var(--k-book); }
+.review-verdict.inaccuracy { border-left-color: var(--k-inaccuracy); }
+.review-verdict.mistake { border-left-color: var(--k-mistake); }
+.review-verdict.miss { border-left-color: var(--k-miss); }
+.review-verdict.blunder { border-left-color: var(--k-blunder); }
 
-.review-verdict.inaccuracy {
-  border-left-color: #c9a227;
-}
-
-.review-verdict.mistake {
-  border-left-color: #d9822b;
-}
-
-.review-verdict.blunder {
-  border-left-color: var(--danger);
+.retry-box.win,
+.retry-box.view { border-left-color: var(--k-best); }
+.retry-box.fail { border-left-color: var(--k-mistake); }
+.retry-box .row,
+.retry-start {
+  flex-wrap: wrap;
+  margin-top: 8px;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Color } from 'chess.js';
 import { PlayView } from './components/PlayView';
 import { AnalysisView } from './components/analysis/AnalysisView';
+import type { AnalysedGame, AnalysisRequest } from './components/analysis/AnalysisView';
 import { linkedPuzzle, linkedPuzzleMode, PuzzleView } from './components/puzzles/PuzzleView';
 import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
@@ -32,7 +33,7 @@ export default function App() {
   );
   const [playOrientation, setPlayOrientation] = useState<Color>('w');
   const [analysisOrientation, setAnalysisOrientation] = useState<Color>('w');
-  const [analysisRequest, setAnalysisRequest] = useState<{ pgn: string; nonce: number } | null>(null);
+  const [analysisRequest, setAnalysisRequest] = useState<AnalysisRequest | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [computerGame, setComputerGame] = useState<{ setup: GameSetup; n: number } | null>(null);
   const { theme, toggleTheme } = useTheme();
@@ -43,8 +44,8 @@ export default function App() {
   const flip = () =>
     tab === 'play' ? setPlayOrientation(o => opposite(o)) : setAnalysisOrientation(o => opposite(o));
 
-  const analyse = (pgn: string) => {
-    setAnalysisRequest(r => ({ pgn, nonce: (r?.nonce ?? 0) + 1 }));
+  const analyse = (pgn: string, game?: AnalysedGame) => {
+    setAnalysisRequest(r => ({ pgn, nonce: (r?.nonce ?? 0) + 1, ...(game ? { game } : {}) }));
     setTab('analysis');
   };
 

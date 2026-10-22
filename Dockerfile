@@ -16,6 +16,7 @@ COPY server ./server
 COPY src/chess ./src/chess
 COPY src/online/protocol.ts ./src/online/protocol.ts
 COPY src/puzzles ./src/puzzles
+COPY src/analysis ./src/analysis
 COPY --from=build /app/dist ./dist
 # SQLite file location when DATABASE_URL isn't set (lost when the container is replaced)
 RUN mkdir -p /app/data && chown node:node /app/data

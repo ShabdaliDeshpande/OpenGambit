@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { Chess } from 'chess.js';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Color, PieceSymbol, Square } from 'chess.js';
 import { ReviewPanel, type CurrentVerdict } from './ReviewPanel';
-import { judge, summarize, type Judgement, type Kind, type Score } from '../../analysis/review';
+import { winningChances, type Kind, type Score } from '../../analysis/review';
+import { phaseSummary, reviewMoves, summarizeReview, type GameMove } from '../../analysis/gameReview';
+import { explainMove } from '../../analysis/explain';
+import { afterMove } from '../../analysis/material';
+import { judgeTry, quickVerdict, retryCandidates, retryReducer, startRetry, type RetryAction, type RetryState } from '../../analysis/retry';
+import { encodeUci } from '../../analysis/reviewData';
+import { fromStoredReview, toStoredReview } from '../../analysis/savedReview';
 import { formatEval } from '../../analysis/evalFormat';
-import { mainlinePositions, useGameReview } from '../../hooks/useGameReview';
+import { mainlinePositions, REVIEW_ENGINE, REVIEW_MS, useGameReview, type PositionEval } from '../../hooks/useGameReview';
+import { evaluateOnce } from '../../hooks/evaluateOnce';
+import { fetchReview, saveReview, ApiError } from '../../account/api';
 import type { UciMove } from '../../engine/search';
 import { Board, type Arrow } from '../Board';
 import { PgnFenPanel } from '../PgnFenPanel';
@@ -38,14 +45,34 @@ function savePref(key: string, value: unknown) {
   }
 }
 
+/** A saved online game sent to the board, so its review can be loaded and saved with it. */
+export interface AnalysedGame {
+  id: string;
+  /** The game's moves in UCI, to check the board still shows that game before saving. */
+  moves: readonly string[];
+  /** The viewer played in it, so the server will accept a review from them. */
+  canSave: boolean;
+}
+
+export interface AnalysisRequest {
+  pgn: string;
+  nonce: number;
+  game?: AnalysedGame;
+}
+
 interface Props {
   /** Whether this view is on screen (keyboard and engine run only then). */
   active: boolean;
   orientation: Color;
   onFlip: () => void;
-  /** A PGN to load, sent from the play screen; `nonce` changes on every request. */
-  request: { pgn: string; nonce: number } | null;
+  /** A PGN to load, sent from another screen; `nonce` changes on every request. */
+  request: AnalysisRequest | null;
 }
+
+const turnOf = (fen: string): Color => (fen.split(' ')[1] === 'b' ? 'b' : 'w');
+
+const showScore = (s: Score) =>
+  'mated' in s ? (s.mated === 'w' ? '0–1' : '1–0') : formatEval('mate' in s ? { cp: null, mate: s.mate } : { cp: s.cp, mate: null });
 
 export function AnalysisView({ active, orientation, onFlip, request }: Props) {
   const [state, dispatch] = useReducer(analysisReducer, undefined, initialAnalysis);
@@ -57,33 +84,148 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
     savePref(ENGINE_KEY, { on: engineOn, lines: multiPv });
   }, [engineOn, multiPv]);
 
-  // a game sent here (from Play, an online game or a profile) is reviewed straight away
+  const { root } = state.tree;
+  const review = useGameReview(root);
+  const [retry, setRetry] = useState<RetryState | null>(null);
+
+  // a game sent here (from Play, an online game or a profile) is reviewed straight away,
+  // or its saved review is loaded
   const [reviewRequested, setReviewRequested] = useState(false);
+  const [game, setGame] = useState<AnalysedGame | null>(null);
+  const [savedEvals, setSavedEvals] = useState<PositionEval[] | null>(null);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const savedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!request) return;
+    let cancelled = false;
     try {
       dispatch({ type: 'load', tree: readPgn(request.pgn) });
       setLoadError(null);
-      setReviewRequested(true);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
+      return;
     }
+    setRetry(null);
+    setSavedNote(null);
+    savedKey.current = null;
+    setGame(request.game ?? null);
+    if (!request.game) setReviewRequested(true);
+    else
+      fetchReview(request.game.id)
+        .then(saved => {
+          if (cancelled) return;
+          if (saved) setSavedEvals(fromStoredReview(saved));
+          else setReviewRequested(true);
+        })
+        .catch(() => !cancelled && setReviewRequested(true));
+    return () => {
+      cancelled = true;
+    };
   }, [request]);
 
-  const { root } = state.tree;
-  const node = nodeAt(root, state.path) ?? root;
+  // the board has the game by now: use the saved evaluations, or review it if they don't fit
+  useEffect(() => {
+    if (!savedEvals) return;
+    if (review.seed(savedEvals)) {
+      savedKey.current = `${game?.id}|${savedEvals.length - 1}`;
+      setSavedNote('This review was saved with the game.');
+    } else setReviewRequested(true);
+    setSavedEvals(null);
+  }, [savedEvals, review.seed, game]);
 
+  useEffect(() => {
+    if (!reviewRequested || !active) return;
+    setReviewRequested(false);
+    if (mainlinePositions(root).length > 2) review.start();
+  }, [reviewRequested, active, root, review.start]);
+
+  // the main line as moves, with what the engine found for each position
+  const positions = useMemo(() => mainlinePositions(root), [root]);
+  const gameMoves: GameMove[] = useMemo(
+    () =>
+      positions.slice(1).map((p, i) => {
+        const prev = positions[i]!.node;
+        return { ply: i + 1, color: turnOf(prev.fen), fenBefore: prev.fen, fenAfter: p.node.fen, uci: p.node.uci!, san: p.node.san };
+      }),
+    [positions],
+  );
+  const evals = useMemo(() => positions.map(p => review.evalAt(p)), [positions, review.evalAt]);
+  const reviewed = useMemo(() => reviewMoves(gameMoves, evals), [gameMoves, evals]);
+  const headers = state.tree.headers;
+  const summary = useMemo(() => {
+    if (reviewed.length === 0) return null;
+    const elo = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
+    return summarizeReview(gameMoves, reviewed, evals, { w: elo(headers.WhiteElo), b: elo(headers.BlackElo) });
+  }, [gameMoves, reviewed, evals, headers]);
+  const names: Record<Color, string> = { w: headers.White || 'White', b: headers.Black || 'Black' };
+  const phaseNotes = useMemo(() => (summary ? phaseSummary(summary, reviewed, names) : []), [summary, reviewed, names.w, names.b]);
+  const marks = useMemo(() => new Map<string, Kind>(reviewed.map(m => [positions[m.ply]!.key, m.judgement.kind])), [reviewed, positions]);
+
+  // a finished review of the viewer's own game is saved with it
+  useEffect(() => {
+    if (!game?.canSave || !summary?.complete || review.progress) return;
+    if (gameMoves.map(m => encodeUci(m.uci)).join(' ') !== game.moves.join(' ')) return;
+    const key = `${game.id}|${gameMoves.length}`;
+    if (savedKey.current === key) return;
+    savedKey.current = key;
+    saveReview(game.id, toStoredReview(evals as PositionEval[], reviewed, REVIEW_ENGINE, REVIEW_MS))
+      .then(r => setSavedNote(r.saved ? 'Saved with the game: its accuracy now shows in your game history.' : 'A deeper review of this game is already saved.'))
+      .catch((e: unknown) => {
+        // guests, spectators and games the server doesn't keep just aren't saved
+        if (e instanceof ApiError && [401, 403, 404].includes(e.status)) return;
+        setSavedNote(`Couldn’t save the review: ${e instanceof Error ? e.message : String(e)}`);
+      });
+  }, [game, summary, review.progress, gameMoves, evals, reviewed]);
+
+  // retry mistakes: the board goes to the position before each error
+  const retryJob = useRef<{ cancel: () => void } | null>(null);
+  const dispatchRetry = useCallback((a: RetryAction) => setRetry(s => (s ? retryReducer(s, a) : s)), []);
+  const fault = retry ? reviewed.find(m => m.ply === retry.plies[retry.index]) : undefined;
+  useEffect(() => {
+    if (fault) dispatch({ type: 'goto', path: positions[fault.ply - 1]!.path });
+  }, [fault?.ply]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => retryJob.current?.cancel(), []);
+
+  const retryCounts = useMemo(() => ({ w: retryCandidates(reviewed, 'w').length, b: retryCandidates(reviewed, 'b').length }), [reviewed]);
+
+  const onRetryAction = (action: 'again' | 'show' | 'next' | 'exit') => {
+    retryJob.current?.cancel();
+    if (action === 'exit') return setRetry(null);
+    if (action === 'show') {
+      const answer = fault?.before.best && afterMove(fault.fenBefore, fault.before.best);
+      if (answer) dispatchRetry({ type: 'show', fen: answer.fen });
+      return;
+    }
+    dispatchRetry({ type: action });
+  };
+
+  const tryMove = (from: Square, to: Square, promotion?: PieceSymbol) => {
+    if (!fault || !retry || retry.status !== 'find') return;
+    const attempt = { from, to, ...(promotion ? { promotion } : {}) };
+    const next = afterMove(fault.fenBefore, attempt);
+    if (!next) return;
+    const verdict = quickVerdict(fault, attempt);
+    dispatchRetry({ type: 'try', fen: next.fen, verdict });
+    if (verdict !== 'check') return;
+    const job = evaluateOnce(next.fen, REVIEW_MS);
+    retryJob.current = job;
+    void job.promise.then(score => dispatchRetry({ type: 'checked', verdict: judgeTry(fault, score) }));
+  };
+
+  const node = nodeAt(root, state.path) ?? root;
   const target = useMemo(
     () => ({ startFen: root.fen, moves: movesAlong(root, state.path), key: `${root.fen}|${state.path.join(' ')}` }),
     [root, state.path],
   );
-  const analysis = useAnalysis(target, active && engineOn, { multiPv });
+  // the engine keeps quiet while you retry, so it doesn't give the answer away
+  const showEngine = engineOn && !retry;
+  const analysis = useAnalysis(target, active && showEngine, { multiPv });
   const lines = analysis.info?.lines ?? [];
 
   const arrows: Arrow[] = useMemo(() => {
-    if (!engineOn) return [];
+    if (!showEngine) return [];
     return lines.slice(0, 2).flatMap((l, i) => (l.pv[0] ? [{ from: l.pv[0].from, to: l.pv[0].to, tone: i === 0 ? 'best' : 'alt' } as Arrow] : []));
-  }, [lines, engineOn]);
+  }, [lines, showEngine]);
 
   const onMove = useCallback(
     (from: Square, to: Square, promotion?: PieceSymbol) =>
@@ -99,80 +241,68 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
       last: () => dispatch({ type: 'last' }),
       flip: onFlip,
     },
-    active,
+    active && !retry,
   );
 
-  const turn: Color = node.fen.split(' ')[1] === 'b' ? 'b' : 'w';
+  const turn = turnOf(node.fen);
   const pgn = useMemo(() => writePgn(state.tree), [state.tree]);
 
-  // game review: a verdict for every main-line move whose positions before and after are analysed
-  const review = useGameReview(root);
-  useEffect(() => {
-    if (!reviewRequested || !active) return;
-    setReviewRequested(false);
-    if (mainlinePositions(root).length > 2) review.start();
-  }, [reviewRequested, active, root, review.start]);
-  const reviewed = useMemo(() => {
-    const positions = mainlinePositions(root);
-    const out: { key: string; path: string[]; color: Color; san: string; judgement: Judgement; before: Score; after: Score; best: UciMove | null; fenBefore: string }[] = [];
-    for (let i = 1; i < positions.length; i++) {
-      const [prev, cur] = [positions[i - 1]!, positions[i]!];
-      const [a, b] = [review.evalAt(prev), review.evalAt(cur)];
-      if (!a || !b || !cur.node.uci) continue;
-      const color: Color = prev.node.fen.split(' ')[1] === 'b' ? 'b' : 'w';
-      const m = cur.node.uci;
-      const playedBest = !!a.best && a.best.from === m.from && a.best.to === m.to && (a.best.promotion ?? '') === (m.promotion ?? '');
-      out.push({ key: cur.key, path: cur.path, color, san: cur.node.san, judgement: judge(a.score, b.score, color, playedBest), before: a.score, after: b.score, best: playedBest ? null : a.best, fenBefore: prev.node.fen });
-    }
-    return out;
-  }, [root, review.evalAt]);
-  const marks = useMemo(() => new Map<string, Kind>(reviewed.map(r => [r.key, r.judgement.kind])), [reviewed]);
-  const summary = useMemo(() => (reviewed.length ? summarize(reviewed) : null), [reviewed]);
-
-  const showScore = (s: Score) =>
-    'mated' in s ? (s.mated === 'w' ? '0–1' : '1–0') : formatEval('mate' in s ? { cp: null, mate: s.mate } : { cp: s.cp, mate: null });
-  const here = reviewed.find(r => r.key === state.path.join(' '));
-  const bestSan = (r: (typeof reviewed)[number]) => {
-    if (!r.best) return null;
-    try {
-      return new Chess(r.fenBefore).move(r.best).san;
-    } catch {
-      return null;
-    }
+  const goto = (ply: number) => {
+    const p = positions[ply];
+    if (p) dispatch({ type: 'goto', path: p.path });
   };
+
+  const here = isMainline(root, state.path) ? reviewed.find(m => m.ply === state.path.length) : undefined;
+  const bestSan = here?.before.best && !here.playedBest ? (afterMove(here.fenBefore, here.before.best)?.san ?? null) : null;
+  const explanation = useMemo(() => (here ? explainMove(here) : ''), [here]);
   const current: CurrentVerdict | null = here
-    ? { san: here.san, kind: here.judgement.kind, before: showScore(here.before), after: showScore(here.after), bestSan: bestSan(here) }
+    ? { move: here, before: showScore(here.before.score), after: showScore(here.after.score), bestSan, explanation }
     : null;
 
   /** Jumps to the previous or next inaccuracy (or worse) by `color`. */
   const jump = (color: Color, dir: 1 | -1) => {
-    const bad = reviewed.filter(r => r.color === color && ['inaccuracy', 'mistake', 'blunder'].includes(r.judgement.kind));
+    const bad = reviewed.filter(r => r.color === color && ['inaccuracy', 'mistake', 'miss', 'blunder'].includes(r.judgement.kind));
     const at = state.path.length;
-    const target = dir === 1 ? bad.find(r => r.path.length > at) : [...bad].reverse().find(r => r.path.length < at);
-    const fallback = dir === 1 ? bad[0] : bad.at(-1);
-    const go = target ?? fallback;
-    if (go) dispatch({ type: 'goto', path: go.path });
+    const found = dir === 1 ? bad.find(r => r.ply > at) : [...bad].reverse().find(r => r.ply < at);
+    const go = found ?? (dir === 1 ? bad[0] : bad.at(-1));
+    if (go) goto(go.ply);
   };
 
   /** Plays the engine's move instead, as a variation from the position before. */
   const showBest = () => {
-    if (!here?.best) return;
-    dispatch({ type: 'goto', path: here.path.slice(0, -1) });
-    dispatch({ type: 'play', moves: [here.best] });
+    if (!here?.before.best) return;
+    goto(here.ply - 1);
+    dispatch({ type: 'play', moves: [here.before.best as UciMove] });
   };
 
-  const names: Record<Color, string> = { w: state.tree.headers.White || 'White', b: state.tree.headers.Black || 'Black' };
+  const graph = useMemo(() => {
+    if (!evals.some(Boolean)) return null;
+    return {
+      points: evals.map(e => (e ? winningChances(e.score, 'w') : null)),
+      kinds: new Map<number, Kind>(reviewed.map(m => [m.ply, m.judgement.kind])),
+      division: summary?.division ?? { middle: null, end: null },
+      ply: isMainline(root, state.path) ? state.path.length : Math.max(0, state.path.length - 1),
+    };
+  }, [evals, reviewed, summary, root, state.path]);
+
+  const clearGame = () => {
+    setGame(null);
+    setRetry(null);
+    setSavedNote(null);
+  };
+
+  const boardFen = retry && fault ? (retry.tryFen ?? fault.fenBefore) : node.fen;
 
   return (
     <main className="layout analysis">
       <div className="board-wrap with-eval">
-        {engineOn && <EvalBar line={lines[0] ?? null} orientation={orientation} />}
+        {showEngine && <EvalBar line={lines[0] ?? null} orientation={orientation} />}
         <Board
-          fen={node.fen}
+          fen={boardFen}
           orientation={orientation}
-          movableColor={turn}
-          lastMove={node.uci ? { from: node.uci.from, to: node.uci.to } : null}
-          onMove={onMove}
+          movableColor={retry ? (retry.status === 'find' && fault ? fault.color : null) : turn}
+          lastMove={retry ? null : node.uci ? { from: node.uci.from, to: node.uci.to } : null}
+          onMove={retry ? tryMove : onMove}
           arrows={arrows}
         />
       </div>
@@ -180,7 +310,7 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
       <aside className="side">
         <EngineLines
           fen={node.fen}
-          enabled={engineOn}
+          enabled={showEngine}
           multiPv={multiPv}
           analysis={analysis}
           onToggle={() => setEngineOn(on => !on)}
@@ -188,32 +318,48 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
           onPlayLine={pv => dispatch({ type: 'play', moves: pv })}
         />
 
-        <section className="panel">
-          <TreeView root={root} path={state.path} onSelect={path => dispatch({ type: 'goto', path })} marks={marks} />
-          <div className="nav row" aria-label="Move navigation">
-            <button type="button" onClick={() => dispatch({ type: 'first' })} title="Start (Home)" aria-label="Start position">⏮</button>
-            <button type="button" onClick={() => dispatch({ type: 'prev' })} title="Back (←)" aria-label="Previous move">◀</button>
-            <button type="button" onClick={() => dispatch({ type: 'next' })} title="Forward (→)" aria-label="Next move">▶</button>
-            <button type="button" onClick={() => dispatch({ type: 'last' })} title="End of line (End)" aria-label="End of line">⏭</button>
-          </div>
-          <div className="row tree-actions">
-            <button type="button" onClick={() => dispatch({ type: 'load', tree: emptyTree() })}>New analysis</button>
-            <button type="button" onClick={onFlip} title="Flip board (f)">⇅ Flip</button>
-          </div>
-        </section>
-
         <ReviewPanel
-          moves={mainlinePositions(root).length - 1}
+          moves={positions.length - 1}
           progress={review.progress}
-          reviewed={reviewed.length > 0}
           summary={summary}
+          phaseNotes={phaseNotes}
+          reviewed={reviewed}
           names={names}
-          current={current}
+          current={retry ? null : current}
+          graph={retry ? null : graph}
+          retryCounts={retryCounts}
+          retry={retry}
+          savedNote={savedNote}
           onStart={review.start}
           onStop={review.stop}
           onJump={jump}
           onShowBest={showBest}
+          onGoto={goto}
+          onRetry={color => setRetry(startRetry(reviewed, color))}
+          onRetryAction={onRetryAction}
         />
+
+        <section className="panel">
+          <TreeView root={root} path={state.path} onSelect={path => !retry && dispatch({ type: 'goto', path })} marks={marks} />
+          <div className="nav row" aria-label="Move navigation">
+            <button type="button" onClick={() => dispatch({ type: 'first' })} disabled={!!retry} title="Start (Home)" aria-label="Start position">⏮</button>
+            <button type="button" onClick={() => dispatch({ type: 'prev' })} disabled={!!retry} title="Back (←)" aria-label="Previous move">◀</button>
+            <button type="button" onClick={() => dispatch({ type: 'next' })} disabled={!!retry} title="Forward (→)" aria-label="Next move">▶</button>
+            <button type="button" onClick={() => dispatch({ type: 'last' })} disabled={!!retry} title="End of line (End)" aria-label="End of line">⏭</button>
+          </div>
+          <div className="row tree-actions">
+            <button
+              type="button"
+              onClick={() => {
+                clearGame();
+                dispatch({ type: 'load', tree: emptyTree() });
+              }}
+            >
+              New analysis
+            </button>
+            <button type="button" onClick={onFlip} title="Flip board (f)">⇅ Flip</button>
+          </div>
+        </section>
 
         <NodeTools
           node={node}
@@ -230,8 +376,14 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
         <PgnFenPanel
           pgn={pgn}
           fen={node.fen}
-          onLoadPgn={text => dispatch({ type: 'load', tree: readPgn(text) })}
-          onLoadFen={text => dispatch({ type: 'load', tree: emptyTree(checkFen(text)) })}
+          onLoadPgn={text => {
+            clearGame();
+            dispatch({ type: 'load', tree: readPgn(text) });
+          }}
+          onLoadFen={text => {
+            clearGame();
+            dispatch({ type: 'load', tree: emptyTree(checkFen(text)) });
+          }}
         />
       </aside>
     </main>

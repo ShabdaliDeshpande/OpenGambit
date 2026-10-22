@@ -14,6 +14,7 @@ import { findTimeControl } from '../../chess/clock';
 import { TERMINATION_LABEL } from '../../chess/gameEnd';
 import { gamePgn } from '../../online/view';
 import { AccountSettings } from './AccountSettings';
+import type { AnalysedGame } from '../analysis/AnalysisView';
 
 const REASON: Record<string, string> = {
   checkmate: 'checkmate',
@@ -29,6 +30,8 @@ const REASON: Record<string, string> = {
   'abandoned-draw': 'opponent left',
 };
 
+const accuracyText = (v: number | null) => (v === null ? '–' : `${Math.round(v)}%`);
+
 const dateText = (ms: number) => new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 interface Props {
@@ -36,7 +39,7 @@ interface Props {
   /** The signed-in user's id, to mark their side of each game. */
   meId: string | null;
   onOpenProfile: (name: string) => void;
-  onAnalyse: (pgn: string) => void;
+  onAnalyse: (pgn: string, game?: AnalysedGame) => void;
   onAccountDeleted: () => void;
 }
 
@@ -95,6 +98,7 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccoun
           blackElo: full.black.rating,
           date: new Date(full.endedAt),
         }),
+        { id: full.id, moves: full.moves ?? [], canSave: !!meId && (full.white.id === meId || full.black.id === meId) },
       );
     } catch (e) {
       setError((e as Error).message);
@@ -201,9 +205,15 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccoun
                     {g.result} by {REASON[g.reason] ?? TERMINATION_LABEL[g.reason as keyof typeof TERMINATION_LABEL] ?? g.reason} ·{' '}
                     {findTimeControl(g.tc)?.label ?? g.tc} · {g.rated ? 'Rated' : 'Casual'} · {Math.ceil(g.plies / 2)} moves · {dateText(g.endedAt)}
                     {g[mine].diff !== null && <strong className={`diff ${g[mine].diff! >= 0 ? 'up' : 'down'}`}> {diffText(g[mine].diff)}</strong>}
+                    {g.review && (
+                      <span className="history-accuracy" title="Accuracy from the saved game review (White · Black)">
+                        {' '}
+                        · Accuracy {accuracyText(g.review.white)} · {accuracyText(g.review.black)}
+                      </span>
+                    )}
                   </div>
                   <button type="button" onClick={() => analyse(g)} disabled={g.plies === 0}>
-                    🔍 Analyse
+                    {g.review ? '📊 Review' : '🔍 Analyse'}
                   </button>
                 </li>
               );

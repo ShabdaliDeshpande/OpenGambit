@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Speed } from './config.ts';
 import type { Db, Queryable } from './db/db.ts';
 import { afterIdle, capped, DEFAULT_GLICKO, isProvisional, rateGame, ratePeriod, type Glicko, type Score } from './rating/glicko2.ts';
+import type { StoredReview } from '../src/analysis/reviewData.ts';
 
 export const CATEGORIES: readonly Speed[] = ['bullet', 'blitz', 'rapid', 'classical'];
 
@@ -41,6 +42,31 @@ export interface StoredGame extends GameRecord {
   blackRating: number | null;
   whiteDiff: number | null;
   blackDiff: number | null;
+  /** Accuracy per side from a saved review (only filled in by `gamesOf`). */
+  review?: { white: number | null; black: number | null } | null;
+}
+
+export interface ReviewRecord {
+  gameId: string;
+  review: StoredReview;
+  whiteAccuracy: number | null;
+  blackAccuracy: number | null;
+  whitePerformance: number | null;
+  blackPerformance: number | null;
+  reviewedBy: string | null;
+  createdAt: number;
+}
+
+interface ReviewRow {
+  game_id: string;
+  data: string;
+  white_accuracy: number | null;
+  black_accuracy: number | null;
+  white_performance: number | null;
+  black_performance: number | null;
+  engine_ms: number;
+  reviewed_by: string | null;
+  created_at: number;
 }
 
 export interface RatingChange {
@@ -78,6 +104,10 @@ interface GameRow {
   started_at: number;
   ended_at: number;
   tournament_id: string | null;
+  /** Present when the query joins game_reviews. */
+  white_accuracy?: number | null;
+  black_accuracy?: number | null;
+  has_review?: string | null;
 }
 
 const toUser = (r: UserRow): User => ({ id: r.id, username: r.username, createdAt: Number(r.created_at) });
@@ -101,6 +131,24 @@ const toGame = (r: GameRow): StoredGame => ({
   startedAt: Number(r.started_at),
   endedAt: Number(r.ended_at),
   tournamentId: r.tournament_id ?? null,
+  ...(r.has_review !== undefined
+    ? {
+        review: r.has_review
+          ? { white: r.white_accuracy === null ? null : Number(r.white_accuracy), black: r.black_accuracy === null ? null : Number(r.black_accuracy) }
+          : null,
+      }
+    : {}),
+});
+
+const toReview = (r: ReviewRow): ReviewRecord => ({
+  gameId: r.game_id,
+  review: JSON.parse(r.data) as StoredReview,
+  whiteAccuracy: r.white_accuracy === null ? null : Number(r.white_accuracy),
+  blackAccuracy: r.black_accuracy === null ? null : Number(r.black_accuracy),
+  whitePerformance: r.white_performance === null ? null : Number(r.white_performance),
+  blackPerformance: r.black_performance === null ? null : Number(r.black_performance),
+  reviewedBy: r.reviewed_by,
+  createdAt: Number(r.created_at),
 });
 
 /** Puzzles are treated as fixed-strength opponents with this rating deviation. */
@@ -391,13 +439,49 @@ export class Store {
     return row && toGame(row);
   }
 
-  /** A player's games, newest first; pass the oldest `endedAt` seen to get the next page. */
+  /** A player's games, newest first, with review accuracy; pass the oldest `endedAt` seen to get the next page. */
   async gamesOf(userId: string, limit = 20, before = Number.MAX_SAFE_INTEGER): Promise<StoredGame[]> {
     const rows = await this.db.all<GameRow>(
-      'SELECT * FROM games WHERE (white_id = ? OR black_id = ?) AND ended_at < ? ORDER BY ended_at DESC LIMIT ?',
+      `SELECT g.*, r.white_accuracy, r.black_accuracy, r.game_id AS has_review FROM games g LEFT JOIN game_reviews r ON r.game_id = g.id
+       WHERE (g.white_id = ? OR g.black_id = ?) AND g.ended_at < ? ORDER BY g.ended_at DESC LIMIT ?`,
       [userId, userId, before, limit],
     );
     return rows.map(toGame);
+  }
+
+  /**
+   * Saves a game's review, replacing an earlier one unless that one gave the
+   * engine more time per position. Returns whether this review was kept.
+   */
+  async saveReview(record: Omit<ReviewRecord, 'createdAt'>): Promise<boolean> {
+    return this.db.transaction(async tx => {
+      const old = await tx.get<{ engine_ms: number }>('SELECT engine_ms FROM game_reviews WHERE game_id = ?', [record.gameId]);
+      if (old && Number(old.engine_ms) > record.review.ms) return false;
+      await tx.run(
+        `INSERT INTO game_reviews (game_id, data, white_accuracy, black_accuracy, white_performance, black_performance, engine_ms, reviewed_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (game_id) DO UPDATE SET data = excluded.data, white_accuracy = excluded.white_accuracy, black_accuracy = excluded.black_accuracy,
+           white_performance = excluded.white_performance, black_performance = excluded.black_performance, engine_ms = excluded.engine_ms,
+           reviewed_by = excluded.reviewed_by, created_at = excluded.created_at`,
+        [
+          record.gameId,
+          JSON.stringify(record.review),
+          record.whiteAccuracy,
+          record.blackAccuracy,
+          record.whitePerformance,
+          record.blackPerformance,
+          record.review.ms,
+          record.reviewedBy,
+          this.now(),
+        ],
+      );
+      return true;
+    });
+  }
+
+  async review(gameId: string): Promise<ReviewRecord | undefined> {
+    const row = await this.db.get<ReviewRow>('SELECT * FROM game_reviews WHERE game_id = ?', [gameId]);
+    return row && toReview(row);
   }
 
   async saveTournament(t: TournamentRecord): Promise<void> {

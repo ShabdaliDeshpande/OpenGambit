@@ -1,35 +1,47 @@
 // Game review: judges each move from the engine's evaluation before and after
 // it. Bad moves follow lila's rules (inaccuracy, mistake and blunder by the
-// drop in winning chances, special cases for forced mates); good moves are
-// split into best, excellent and good. Pure functions, easy to test.
+// drop in winning chances, special cases for forced mates). The other classes
+// (brilliant, great, best, excellent, good, book, miss) are this app's own,
+// described in docs/lila-feature-map.md §13. Pure functions, easy to test.
 
 import { Chess } from 'chess.js';
 import type { Color } from 'chess.js';
 import type { AnalysisLine } from '../engine/search';
+import { moveAccuracy, povCp, winningChances, type Score } from './accuracy';
 
-/** An evaluation from White's point of view. `mated` is a finished game: that side is checkmated. */
-export type Score = { cp: number } | { mate: number } | { mated: Color };
+export { povCp, winningChances, type Score } from './accuracy';
 
-export type Kind = 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
+export type Kind = 'brilliant' | 'great' | 'best' | 'excellent' | 'good' | 'book' | 'inaccuracy' | 'mistake' | 'miss' | 'blunder';
 
-export const KINDS: readonly Kind[] = ['best', 'excellent', 'good', 'inaccuracy', 'mistake', 'blunder'];
+export const KINDS: readonly Kind[] = ['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'inaccuracy', 'mistake', 'miss', 'blunder'];
+
+/** Classes that count as errors (jumps, retries, key moments). */
+export const BAD_KINDS: readonly Kind[] = ['inaccuracy', 'mistake', 'miss', 'blunder'];
 
 export const KIND_LABEL: Record<Kind, string> = {
+  brilliant: 'Brilliant',
+  great: 'Great',
   best: 'Best',
   excellent: 'Excellent',
   good: 'Good',
+  book: 'Book',
   inaccuracy: 'Inaccuracy',
   mistake: 'Mistake',
+  miss: 'Miss',
   blunder: 'Blunder',
 };
 
 /** Short marks shown next to moves. */
 export const KIND_MARK: Record<Kind, string> = {
+  brilliant: '!!',
+  great: '!',
   best: '★',
   excellent: '✓✓',
   good: '✓',
+  book: '≡',
   inaccuracy: '?!',
   mistake: '?',
+  miss: '×',
   blunder: '??',
 };
 
@@ -47,24 +59,8 @@ export function scoreOf(line: Pick<AnalysisLine, 'cp' | 'mate'> | undefined, fen
   return line.mate !== null ? { mate: line.mate } : { cp: line.cp ?? 0 };
 }
 
-/** Centipawns for `pov` (mates count as ±1000, a finished mate as ±1000 too). */
-export function povCp(score: Score, pov: Color): number {
-  const sign = pov === 'w' ? 1 : -1;
-  if ('cp' in score) return sign * score.cp;
-  if ('mate' in score) return sign * (score.mate > 0 ? 1000 : -1000);
-  return score.mated === pov ? -1000 : 1000;
-}
-
-/** Winning chances for `pov` between −1 and 1 (the logistic curve lila uses). */
-export function winningChances(score: Score, pov: Color): number {
-  if ('mated' in score) return score.mated === pov ? -1 : 1;
-  if ('mate' in score) return (score.mate > 0) === (pov === 'w') ? 1 : -1;
-  const cp = Math.max(-1000, Math.min(1000, povCp(score, pov)));
-  return 2 / (1 + Math.exp(-0.00368208 * cp)) - 1;
-}
-
 /** Whether `pov` has a forced mate (or has just delivered one). */
-const hasMate = (score: Score, pov: Color) =>
+export const hasMate = (score: Score, pov: Color) =>
   ('mate' in score && (score.mate > 0) === (pov === 'w')) || ('mated' in score && score.mated !== pov);
 
 export interface Judgement {
@@ -75,13 +71,16 @@ export interface Judgement {
   accuracy: number;
 }
 
-/** Judges a move by `mover` that turned `before` into `after`. `playedBest`: it was the engine's top choice. */
+/**
+ * Judges a move by `mover` that turned `before` into `after` with lila's rules
+ * for bad moves, and splits the rest into best, excellent and good.
+ * `playedBest`: it was the engine's top choice.
+ */
 export function judge(before: Score, after: Score, mover: Color, playedBest: boolean): Judgement {
   const cb = winningChances(before, mover);
   const ca = winningChances(after, mover);
   const loss = Math.max(0, cb - ca);
-  const winDrop = Math.max(0, (50 + 50 * cb) - (50 + 50 * ca));
-  const accuracy = Math.max(0, Math.min(100, 103.1668100711649 * Math.exp(-0.04354415386753951 * winDrop) - 3.166924740191411));
+  const accuracy = moveAccuracy(50 + 50 * cb, 50 + 50 * ca);
 
   // forced mates, as lila judges them
   const mateCreated = !hasMate(before, other(mover)) && hasMate(after, other(mover));
@@ -102,22 +101,48 @@ export function judge(before: Score, after: Score, mover: Color, playedBest: boo
   return { kind, loss, accuracy };
 }
 
-export interface SideSummary {
-  counts: Record<Kind, number>;
-  /** Average of the arithmetic and harmonic means of the move accuracies; null with no moves. */
-  accuracy: number | null;
+export interface MoveFacts {
+  before: Score;
+  after: Score;
+  mover: Color;
+  playedBest: boolean;
+  /** The score of the engine's second choice in the position before, when it was searched. */
+  second?: Score | null;
+  /** The class of the opponent's previous move. */
+  previous?: Kind | null;
+  /** The move is opening theory (from imported master games). */
+  book?: boolean;
+  /** Material the move gives up by exchanges, in pawns (`materialOffered`); a function is only called when needed. */
+  offered?: number | (() => number);
 }
 
-/** Totals per side, from the judged moves. */
-export function summarize(moves: readonly { color: Color; judgement: Judgement }[]): Record<Color, SideSummary> {
-  const side = (c: Color): SideSummary => {
-    const mine = moves.filter(m => m.color === c).map(m => m.judgement);
-    const counts = Object.fromEntries(KINDS.map(k => [k, mine.filter(j => j.kind === k).length])) as Record<Kind, number>;
-    if (mine.length === 0) return { counts, accuracy: null };
-    const accs = mine.map(j => Math.max(1, j.accuracy));
-    const mean = accs.reduce((s, a) => s + a, 0) / accs.length;
-    const harmonic = accs.length / accs.reduce((s, a) => s + 1 / a, 0);
-    return { counts, accuracy: Math.round(((mean + harmonic) / 2) * 10) / 10 };
-  };
-  return { w: side('w'), b: side('b') };
+/** A move gives up at least this much (pawns) to count as a sacrifice: a piece for a pawn, or more. */
+export const SACRIFICE = 2;
+
+/**
+ * The full class of a move. Checked in this order: book; lila's bad-move
+ * rules, with a missed chance to punish the opponent's mistake (or a lost mate
+ * while still clearly winning) called a miss; a sacrifice that the engine
+ * likes is brilliant; the only move that holds is great; then best, excellent
+ * and good.
+ */
+export function classify(f: MoveFacts): Judgement {
+  const base = judge(f.before, f.after, f.mover, f.playedBest);
+  if (f.book) return { ...base, kind: 'book' };
+  if (base.kind === 'blunder') return base;
+
+  const punishable = f.previous === 'mistake' || f.previous === 'blunder';
+  const lostMate = hasMate(f.before, f.mover) && !hasMate(f.after, f.mover);
+  if ((base.kind === 'inaccuracy' || base.kind === 'mistake') && punishable) return { ...base, kind: 'miss' };
+  if (base.kind === 'inaccuracy' && lostMate) return { ...base, kind: 'miss' };
+
+  const nearBest = f.playedBest || base.loss <= 0.02;
+  if ((base.kind === 'best' || base.kind === 'excellent') && nearBest) {
+    const cb = winningChances(f.before, f.mover);
+    const ca = winningChances(f.after, f.mover);
+    const offered = () => (typeof f.offered === 'function' ? f.offered() : (f.offered ?? 0));
+    if (cb < 0.8 && ca >= 0 && offered() >= SACRIFICE) return { ...base, kind: 'brilliant' };
+    if (f.playedBest && f.second && cb - winningChances(f.second, f.mover) >= 0.2) return { ...base, kind: 'great' };
+  }
+  return base;
 }
