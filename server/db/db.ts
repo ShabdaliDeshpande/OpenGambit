@@ -149,6 +149,13 @@ export const MIGRATIONS: string[] = [
   );`,
   `ALTER TABLE games ADD COLUMN clocks TEXT;
   ALTER TABLE users ADD COLUMN insights_public INTEGER NOT NULL DEFAULT 0;`,
+  `CREATE TABLE learn_progress (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    value BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (user_id, item)
+  );`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

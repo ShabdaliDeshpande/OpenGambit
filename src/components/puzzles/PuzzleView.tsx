@@ -25,6 +25,7 @@ import { diffText, fetchDailyPuzzle, ratingText, submitPuzzleAttempt, type Me, t
 import { PuzzleDashboard } from './PuzzleDashboard';
 import { StormView } from './StormView';
 import { StreakView } from './StreakView';
+import { SolutionExplainer } from './SolutionExplainer';
 
 const STATS_KEY = 'chess-app:puzzle-stats';
 const IMPORTED_URL = '/puzzles/imported.json';
@@ -346,6 +347,7 @@ export function PuzzleView({ active, onAnalyse, me, onRated, onSignIn }: Props) 
               </>
             )}
           </div>
+          {phase === 'solved' && daily?.id === puzzle.id && <SolutionExplainer key={`${puzzle.id}:${session.attempt}`} puzzle={puzzle} />}
           <dl className="puzzle-meta">
             <div>
               <dt>Rating</dt>

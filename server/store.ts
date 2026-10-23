@@ -4,6 +4,7 @@ import type { Db, Queryable } from './db/db.ts';
 import { afterIdle, capped, DEFAULT_GLICKO, isProvisional, rateGame, ratePeriod, type Glicko, type Score } from './rating/glicko2.ts';
 import type { StoredReview } from '../src/analysis/reviewData.ts';
 import { indexGame } from './explorer/explorerStore.ts';
+import { mergeProgress, type Progress } from '../src/learn/progress.ts';
 
 export const CATEGORIES: readonly Speed[] = ['bullet', 'blitz', 'rapid', 'classical'];
 
@@ -641,5 +642,28 @@ export class Store {
 
   async setInsightsPublic(userId: string, on: boolean): Promise<void> {
     await this.db.run('UPDATE users SET insights_public = ? WHERE id = ?', [on ? 1 : 0, userId]);
+  }
+
+  /** Lesson stars, drill times and finished endgames saved for this player. */
+  async learnProgress(userId: string, q: Queryable = this.db): Promise<Progress> {
+    const rows = await q.all<{ item: string; value: number | string }>('SELECT item, value FROM learn_progress WHERE user_id = ?', [userId]);
+    return Object.fromEntries(rows.map(r => [r.item, Number(r.value)]));
+  }
+
+  /** Merges results into the saved progress, keeping the better one of each; returns the whole record. */
+  async saveLearnProgress(userId: string, items: Progress): Promise<Progress> {
+    return this.db.transaction(async tx => {
+      const saved = await this.learnProgress(userId, tx);
+      const merged = mergeProgress(saved, items);
+      for (const [item, value] of Object.entries(merged)) {
+        if (saved[item] === value) continue;
+        await tx.run(
+          `INSERT INTO learn_progress (user_id, item, value, updated_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (user_id, item) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+          [userId, item, value, this.now()],
+        );
+      }
+      return merged;
+    });
   }
 }

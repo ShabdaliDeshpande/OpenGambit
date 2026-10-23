@@ -303,6 +303,49 @@ npm run explorer:index-site
 - **Clock times:** from this phase on, each online game also saves the time left after every move. Older games count everywhere except the Time card.
 - **Charts:** they're drawn in SVG by this app. Their colours were checked for colour-blind separation and contrast in both themes, and each chart has a table or keyboard-readable view.
 
+## Features (Phase 15: Learning)
+
+The **Learn** tab is free for everyone. Guests keep their progress in the browser. When you're signed in, it's also kept with your account, and signing in merges the two: each lesson keeps its most stars, each drill its fastest time.
+
+| Section | What it is |
+|---|---|
+| 📘 Lessons | 23 short levels in 13 stages, from how each piece moves to capturing, check, checkmate, stalemate, castling and en passant. Most levels ask you to collect stars, capture, give check, mate or promote. In star, capture and promotion levels the other side doesn't move, so you can concentrate on your piece. A level earns up to three stars. Every two moves over par cost a star (one extra move already costs one), and so does each wrong move, but you always keep at least one. Every level has a hint, and a wrong move can be taken back. |
+| ⏱ Drills | Timed runs through built-in puzzles: mate in one (10 positions), win material (10) and find the fork (8). One move per position, a wrong move adds 5 seconds, and your best time is kept. |
+| ♔ Endgames | Play basic endgames against the engine: mate with a queen, two rooks or a rook; promote a pawn; hold a draw against a pawn. Each has a move limit. Every move you make is graded good, inaccuracy, mistake or blunder by how much it changes your winning chances, using lila's practice thresholds. |
+| 🎬 Videos | A searchable library with level and topic filters, read from `public/videos.json`. It ships empty. |
+
+**Daily puzzle explanation.** Once you've solved the daily puzzle (or shown its solution), **💡 Explain the solution** lets the engine look at each position. Every one of your moves is then classified and explained in Game Review's words.
+
+### Adding videos
+
+Edit `public/videos.json` (it goes into the build as `/videos.json`):
+
+```json
+{
+  "videos": [
+    {
+      "title": "Rook endings you must know",
+      "url": "https://www.youtube.com/watch?v=VIDEO_ID",
+      "author": "Channel name",
+      "level": "intermediate",
+      "tags": ["endgames", "rooks"],
+      "language": "en",
+      "duration": "14:05"
+    }
+  ]
+}
+```
+
+- **Required fields:** `title`, and a `url` that links to a web page.
+- **Optional fields:**
+  - `level`: beginner, intermediate or advanced;
+  - `tags`;
+  - `language`;
+  - `duration`: mm:ss or h:mm:ss.
+- **Bad entries** are left out, and the Videos section says why.
+- **Playback:** YouTube links play on the page in YouTube's privacy-enhanced (youtube-nocookie) player, and only once you press play. Other links open in a new tab.
+- **Updates:** returning visitors may see a change one visit late, because the service worker refreshes the file in the background.
+
 ## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
@@ -372,6 +415,9 @@ src/
   account/api.ts  calls to the account API
   components/account/  AccountDialog (sign in / create account), ProfileView, AccountSettings, InsightsView
   components/charts/   LineChart, ResultBars and their scale helpers (SVG, drawn by this app)
+  learn/        lessons and their rules (level.ts), drills, endgame goals and grading, the video list check,
+                progress keys and merging (progress.ts, shared with the server), puzzle explanations
+  components/learn/    LearnView, LessonPlayer, DrillPlayer, EndgamePlayer, VideoLibrary
   App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
 server/         the server (Node, run directly from TypeScript)
   backend.ts    opens the database and wires the API and game server together
@@ -405,6 +451,7 @@ scripts/engine-match.ts  plays the engine against a committed version of itself,
 scripts/import-explorer.ts, import-openings.ts, index-site-explorer.ts  the explorer's importers (npm run explorer:import, openings:import, explorer:index-site)
 scripts/smoke-explorer.ts  end-to-end check of the explorer tabs, opening names and book moves
 scripts/smoke-insights.ts  end-to-end check of insights: games with clocks, a review, private then public
+scripts/smoke-learn.ts  end-to-end check of learning progress: saving, keeping the better result, accounts kept apart
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -480,6 +527,9 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Threads share the first moves, not memory.** Workers can't share a transposition table without cross-origin isolation headers, so more threads search each share deeper but don't combine their knowledge, and the reported depth is the shallowest worker's.
 - **The threat search starts fresh** from the position with the other side to move, so it doesn't see repetitions in the game so far.
 - **Insights only cover online games played while signed in,** and the Time card only games from Phase 14 on (when clock times started being saved). Berserk games in tournaments count time trouble against the full starting clock.
+- **Lessons are a fixed set of 23 levels,** and drills draw from the 65 built-in puzzles, so a drill repeats its positions in a different order each run.
+- **Endgame practice is judged by a 0.8-second search,** without tablebases. The engine usually defends well in these simple endings but not always perfectly, and a grade can be off in a close case.
+- **Learning progress can't be reset from the app yet.** Clearing the site's data resets a guest's progress.
 - **No endgame tablebases.** Server-side analysis exists but is off unless the server is started with `ANALYSIS_QUEUE=1`, and its queue lives in memory: a restart drops games still waiting.
 - **Drawn shapes need a mouse.** Touch screens can't right-click, so there's no way to draw on a phone or tablet yet.
 - **The analysis tree is not saved.** It's lost on reload; export the PGN to keep it.

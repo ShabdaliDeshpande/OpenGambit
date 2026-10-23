@@ -98,7 +98,7 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Most-played openings.
 - Needs an account. **Decided:** private by default, with a setting to make them public.
 
-## Phase 15: Learning (planned)
+## Phase 15: Learning (done)
 - Original interactive lessons, timed drills, and endgame practice against the engine.
 - An explanation for the daily puzzle.
 - A video library read from a JSON file you fill in.

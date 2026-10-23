@@ -8,16 +8,17 @@ import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
 import { ProfileView } from './components/account/ProfileView';
 import { InsightsView } from './components/account/InsightsView';
+import { LearnView } from './components/learn/LearnView';
 import { opposite } from './chess/clock';
 import type { GameSetup } from './chess/game';
 import { useAccount } from './hooks/useAccount';
 import { useTheme } from './hooks/useTheme';
 import { useSoundSetting } from './hooks/useGameSounds';
 
-type Tab = 'play' | 'online' | 'puzzles' | 'analysis' | 'profile' | 'insights';
+type Tab = 'play' | 'online' | 'puzzles' | 'learn' | 'analysis' | 'profile' | 'insights';
 
-const TABS = ['play', 'online', 'puzzles', 'analysis'] as const;
-const TAB_LABEL: Record<(typeof TABS)[number], string> = { play: 'Play', online: 'Play online', puzzles: 'Puzzles', analysis: 'Analysis board' };
+const TABS = ['play', 'online', 'puzzles', 'learn', 'analysis'] as const;
+const TAB_LABEL: Record<(typeof TABS)[number], string> = { play: 'Play', online: 'Play online', puzzles: 'Puzzles', learn: 'Learn', analysis: 'Analysis board' };
 
 const USERNAME = /^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$/;
 
@@ -176,6 +177,7 @@ export default function App() {
       <div hidden={tab !== 'puzzles'}>
         <PuzzleView active={tab === 'puzzles'} onAnalyse={analyse} me={me} onRated={account.refresh} onSignIn={() => setSigningIn(true)} />
       </div>
+      {tab === 'learn' && <LearnView signedIn={!!me} />}
       <div hidden={tab !== 'analysis'}>
         <AnalysisView
           active={tab === 'analysis'}

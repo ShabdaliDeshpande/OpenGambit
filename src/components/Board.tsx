@@ -28,6 +28,8 @@ export interface BoardProps {
   arrows?: Arrow[];
   /** Squares to highlight (e.g. a hint). */
   marks?: Square[];
+  /** Squares with a star to collect (lessons). */
+  stars?: Square[];
   /** The side that may queue a premove while it's the other side's turn. */
   premoveColor?: Color | null;
   premove?: Premove | null;
@@ -122,6 +124,7 @@ export function Board({
   onMove,
   arrows = [],
   marks = [],
+  stars = [],
   premoveColor = null,
   premove = null,
   onPremove,
@@ -294,6 +297,11 @@ export function Board({
       <div key={sq} className={classes.join(' ')} data-square={sq}>
         {col === 0 && <span className="coord rank">{sq[1]}</span>}
         {row === 7 && <span className="coord file">{sq[0]}</span>}
+        {stars.includes(sq) && (
+          <span className="star" aria-label="star">
+            ★
+          </span>
+        )}
         {piece && (
           <Piece
             key={slides?.offsets.has(sq) ? `slide-${slides.id}` : 'still'}

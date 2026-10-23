@@ -66,6 +66,9 @@ export const fetchInsights = async (username: string, q: { speed?: Category | nu
   if (q.since) params.set('since', String(q.since));
   return (await call<{ insights: Insights }>(`/api/insights/${encodeURIComponent(username)}?${params}`)).insights;
 };
+export const fetchLearnProgress = async () => (await call<{ progress: Record<string, number> }>('/api/learn/progress')).progress;
+export const saveLearnProgress = async (progress: Record<string, number>) =>
+  (await call<{ progress: Record<string, number> }>('/api/learn/progress', { progress })).progress;
 export const setInsightsPublic = (on: boolean) => call<{ insightsPublic: boolean }>('/api/account/insights', { public: on });
 
 export interface GameSide {

@@ -140,6 +140,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   const reviewWrites = new LoginLimiter(options.maxReviewWrites ?? 30, 10 * 60_000, now);
   const explorer = new Explorer(store.db);
   const insightsService = new InsightsService(store.db);
+  const progressWrites = new LoginLimiter(120, 10 * 60_000, now);
 
   const puzzleRatingOf = async (userId: string) => {
     const g = currentGlicko(await store.puzzleRating(userId), now());
@@ -308,6 +309,18 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         return send(res, 200, placed);
       }
 
+      if (path === '/api/learn/progress') {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in to keep your progress with your account.');
+        if (progressWrites.blocked(user.id)) throw new HttpError(429, 'Too many updates. Try again in a few minutes.');
+        const body = await readJson(req, 32 * 1024);
+        const items = body.progress && typeof body.progress === 'object' && !Array.isArray(body.progress) ? (body.progress as Record<string, unknown>) : null;
+        if (!items || Object.keys(items).length > 500) throw new HttpError(400, 'Send progress as an object of results.');
+        // entries that aren't valid are simply ignored by the merge
+        progressWrites.fail(user.id);
+        return send(res, 200, { progress: await store.saveLearnProgress(user.id, items as Record<string, number>) });
+      }
+
       if (path === '/api/account/insights') {
         const user = await currentUser(req);
         if (!user) throw new HttpError(401, 'Sign in first.');
@@ -348,6 +361,12 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       if (!user) throw new HttpError(401, 'Sign in to see your puzzle dashboard.');
       const rating = currentGlicko(await store.puzzleRating(user.id), now());
       return send(res, 200, { dashboard: buildDashboard(await store.puzzleAttempts(user.id), rating) });
+    }
+
+    if (path === '/api/learn/progress') {
+      const user = await currentUser(req);
+      if (!user) throw new HttpError(401, 'Sign in to keep your progress with your account.');
+      return send(res, 200, { progress: await store.learnProgress(user.id) });
     }
 
     const insightsFor = /^\/api\/insights\/([^/]+)$/.exec(path);
