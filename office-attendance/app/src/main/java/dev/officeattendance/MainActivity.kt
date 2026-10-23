@@ -32,7 +32,8 @@ import java.util.Date
 import kotlin.math.roundToInt
 
 class MainActivity : Activity() {
-    private class SetupStep(val title: Int, val detail: Int, val action: Int, val run: () -> Unit)
+    /** [needed] steps block automatic check-ins; the others are only recommended. */
+    private class SetupStep(val title: Int, val detail: Int, val action: Int, val needed: Boolean, val run: () -> Unit)
 
     private lateinit var store: AttendanceStore
     private lateinit var grid: MonthGrid
@@ -44,6 +45,7 @@ class MainActivity : Activity() {
     private val todayDetail by lazy { findViewById<TextView>(R.id.today_detail) }
     private val wifiStatus by lazy { findViewById<TextView>(R.id.wifi_status) }
     private val setupCard by lazy { findViewById<View>(R.id.setup_card) }
+    private val setupIntro by lazy { findViewById<View>(R.id.setup_intro) }
     private val setupSteps by lazy { findViewById<LinearLayout>(R.id.setup_steps) }
     private val officeList by lazy { findViewById<LinearLayout>(R.id.office_list) }
     private val officeEmpty by lazy { findViewById<View>(R.id.office_empty) }
@@ -118,6 +120,7 @@ class MainActivity : Activity() {
     private fun renderSetup() {
         val steps = setupSteps()
         setupCard.visibility = if (steps.isEmpty()) View.GONE else View.VISIBLE
+        setupIntro.visibility = if (steps.any { it.needed }) View.VISIBLE else View.GONE
         setupSteps.removeAllViews()
         for (step in steps) {
             val row = layoutInflater.inflate(R.layout.row_setup, setupSteps, false)
@@ -133,21 +136,21 @@ class MainActivity : Activity() {
 
     private fun setupSteps(): List<SetupStep> = buildList {
         if (!granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
-            add(SetupStep(R.string.setup_location, R.string.setup_location_detail, R.string.action_allow) {
+            add(SetupStep(R.string.setup_location, R.string.setup_location_detail, R.string.action_allow, needed = true) {
                 request(LOCATION, REQUEST_LOCATION)
             })
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
-            add(SetupStep(R.string.setup_background, R.string.setup_background_detail, R.string.action_allow) {
+            add(SetupStep(R.string.setup_background, R.string.setup_background_detail, R.string.action_allow, needed = true) {
                 requestBackgroundLocation()
             })
         }
         if (!OfficeWifi.locationEnabled(this@MainActivity)) {
-            add(SetupStep(R.string.setup_location_off, R.string.setup_location_off_detail, R.string.action_turn_on) {
+            add(SetupStep(R.string.setup_location_off, R.string.setup_location_off_detail, R.string.action_turn_on, needed = true) {
                 open(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
             })
         }
         if (!getSystemService(NotificationManager::class.java).areNotificationsEnabled()) {
-            add(SetupStep(R.string.setup_notifications, R.string.setup_notifications_detail, R.string.action_allow) {
+            add(SetupStep(R.string.setup_notifications, R.string.setup_notifications_detail, R.string.action_allow, needed = false) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                     Manifest.permission.POST_NOTIFICATIONS !in permanentlyDenied
                 ) {
@@ -158,7 +161,7 @@ class MainActivity : Activity() {
             })
         }
         if (!getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)) {
-            add(SetupStep(R.string.setup_battery, R.string.setup_battery_detail, R.string.action_allow) {
+            add(SetupStep(R.string.setup_battery, R.string.setup_battery_detail, R.string.action_allow, needed = false) {
                 open(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
             })
         }

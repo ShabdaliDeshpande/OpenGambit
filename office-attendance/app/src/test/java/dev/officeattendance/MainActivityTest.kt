@@ -45,7 +45,17 @@ class MainActivityTest {
         assertEquals(activity.getString(R.string.today_absent), activity.text(R.id.today_status))
         assertEquals(activity.getString(R.string.today_detail_unconfigured), activity.text(R.id.today_detail))
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.setup_card).visibility)
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.setup_intro).visibility)
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.office_empty).visibility)
+    }
+
+    @Test
+    fun locationExplanationHidesOnceOnlyOptionalStepsAreLeft() {
+        grantWifiAccess()
+        val activity = launch()
+        // battery optimization is still on, so the card stays, without the location explanation
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.setup_card).visibility)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.setup_intro).visibility)
     }
 
     @Test
