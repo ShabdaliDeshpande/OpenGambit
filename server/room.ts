@@ -43,6 +43,8 @@ const UCI = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
 export class GameRoom {
   readonly chess = new Chess();
   readonly moves: string[] = [];
+  /** The mover's remaining time (ms, increment included) after each move, for insights. */
+  readonly clocks: number[] = [];
   status: GameStatus = 'playing';
   result: GameResult | null = null;
   endedAt: number | null = null;
@@ -210,6 +212,7 @@ export class GameRoom {
 
     this.chess.move({ from: legal.from, to: legal.to, ...(legal.promotion ? { promotion: legal.promotion as PieceSymbol } : {}) });
     this.moves.push(uci);
+    this.clocks.push(Math.round(this.remaining[color]));
     this.turnStart = now;
     // moving instead of answering declines the opponent's draw offer
     if (this.drawOffer === opposite(color)) this.drawOffer = null;

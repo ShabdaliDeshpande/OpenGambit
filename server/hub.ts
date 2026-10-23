@@ -478,6 +478,7 @@ export class Hub {
         category,
         rated: room.rated,
         moves: room.moves,
+        clocks: room.clocks,
         result: room.result.result,
         reason: room.result.reason,
         startedAt: room.createdAt,

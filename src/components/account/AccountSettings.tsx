@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { changePassword, deleteAccount } from '../../account/api';
+import { useEffect, useState } from 'react';
+import { changePassword, deleteAccount, fetchMe, setInsightsPublic } from '../../account/api';
 
 interface Props {
   username: string;
@@ -16,6 +16,25 @@ export function AccountSettings({ username, onDeleted }: Props) {
   const [confirm, setConfirm] = useState('');
   const [delError, setDelError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [insightsPublic, setPublic] = useState<boolean | null>(null);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchMe()
+      .then(me => setPublic(me?.insightsPublic ?? false))
+      .catch(() => setPublic(false));
+  }, []);
+
+  const toggleInsights = async (on: boolean) => {
+    setInsightsError(null);
+    setPublic(on);
+    try {
+      setPublic((await setInsightsPublic(on)).insightsPublic);
+    } catch (err) {
+      setPublic(!on);
+      setInsightsError((err as Error).message);
+    }
+  };
 
   const submitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +68,14 @@ export function AccountSettings({ username, onDeleted }: Props) {
   return (
     <section className="panel account-settings" aria-label="Account settings">
       <h2>Account settings</h2>
+      <div className="settings-form">
+        <h3>Insights</h3>
+        <label className="row">
+          <input type="checkbox" checked={!!insightsPublic} disabled={insightsPublic === null} onChange={e => void toggleInsights(e.target.checked)} /> Let anyone see my
+          insights (results, ratings, accuracy and time)
+        </label>
+        {insightsError && <p className="error">{insightsError}</p>}
+      </div>
       <form onSubmit={submitPassword} className="settings-form">
         <h3>Change password</h3>
         <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />

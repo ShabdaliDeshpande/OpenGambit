@@ -147,6 +147,8 @@ export const MIGRATIONS: string[] = [
     name TEXT NOT NULL,
     ply INTEGER NOT NULL
   );`,
+  `ALTER TABLE games ADD COLUMN clocks TEXT;
+  ALTER TABLE users ADD COLUMN insights_public INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

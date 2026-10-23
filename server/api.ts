@@ -20,6 +20,8 @@ import type { UciMove } from '../src/puzzles/types.ts';
 import { checkReview, reviewStats } from '../src/analysis/reviewData.ts';
 import type { AnalysisQueue } from './analysisQueue.ts';
 import { Explorer } from './explorer/explorerStore.ts';
+import { InsightsService } from './insights/insightsData.ts';
+import { validTimeZone } from './insights/insights.ts';
 import { validateFen } from 'chess.js';
 import type { Account } from './types.ts';
 
@@ -137,6 +139,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   const puzzleAttempts = new LoginLimiter(options.maxPuzzleAttempts ?? 120, 10 * 60_000, now);
   const reviewWrites = new LoginLimiter(options.maxReviewWrites ?? 30, 10 * 60_000, now);
   const explorer = new Explorer(store.db);
+  const insightsService = new InsightsService(store.db);
 
   const puzzleRatingOf = async (userId: string) => {
     const g = currentGlicko(await store.puzzleRating(userId), now());
@@ -155,6 +158,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
           username: user.username,
           ratings: publicRatings(await store.ratings(user.id), now()),
           puzzleRating: await puzzleRatingOf(user.id),
+          insightsPublic: await store.insightsPublic(user.id),
         }
       : null;
 
@@ -304,6 +308,15 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         return send(res, 200, placed);
       }
 
+      if (path === '/api/account/insights') {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in first.');
+        const body = await readJson(req);
+        if (typeof body.public !== 'boolean') throw new HttpError(400, 'Say whether your insights are public.');
+        await store.setInsightsPublic(user.id, body.public);
+        return send(res, 200, { insightsPublic: body.public });
+      }
+
       if (path === '/api/logout') {
         const token = readCookie(req.headers.cookie, SESSION_COOKIE);
         if (token) await store.deleteSession(token);
@@ -335,6 +348,28 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       if (!user) throw new HttpError(401, 'Sign in to see your puzzle dashboard.');
       const rating = currentGlicko(await store.puzzleRating(user.id), now());
       return send(res, 200, { dashboard: buildDashboard(await store.puzzleAttempts(user.id), rating) });
+    }
+
+    const insightsFor = /^\/api\/insights\/([^/]+)$/.exec(path);
+    if (insightsFor) {
+      const name = decodeURIComponent(insightsFor[1]!);
+      const subject = name.length <= 40 ? await store.userByName(name) : undefined;
+      if (!subject) throw new HttpError(404, 'No such player.');
+      const viewer = await currentUser(req);
+      if (viewer?.id !== subject.id && !(await store.insightsPublic(subject.id)))
+        throw new HttpError(403, `${subject.username} keeps their insights private.`);
+      const speed = url.searchParams.get('speed');
+      const since = Number(url.searchParams.get('since'));
+      const tz = url.searchParams.get('tz') ?? 'UTC';
+      const insights = await insightsService.get(
+        subject.id,
+        {
+          ...(speed && (CATEGORIES as readonly string[]).includes(speed) ? { speed } : {}),
+          ...(Number.isInteger(since) && since > 0 ? { since } : {}),
+        },
+        tz.length <= 64 && validTimeZone(tz) ? tz : 'UTC',
+      );
+      return send(res, 200, { user: { username: subject.username }, insights });
     }
 
     const profile = /^\/api\/users\/([^/]+)$/.exec(path);

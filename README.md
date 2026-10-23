@@ -284,6 +284,25 @@ npm run explorer:index-site
 - **`openings:import`** reads TSV files with a header row naming `eco`, `name` and `pgn` columns, for example `C60⇥Spanish opening⇥1. e4 e5 2. Nf3 Nc6 3. Bb5`. Public-domain opening-name lists in this format exist. When two names reach the same position, the first one read is kept.
 - **`explorer:index-site`** rebuilds the OpenGambit and My games data from games saved before the explorer existed. New games are added as they finish, so you need it only once.
 
+## Features (Phase 14: Insights)
+
+**📈 Insights** on a profile (or an `?insights=<name>` link) shows what a player's saved online games say about them. You can filter by period (all time, or the last 12 months, 3 months or 30 days) and by speed.
+
+| Card | What it shows |
+|---|---|
+| Rating history | Your rating after each rated game, one line per speed. Hover or use the arrow keys to read values; **Show the numbers** gives a table. |
+| Results | Wins, draws and losses by colour, by time control, by time of day (when games ended, in your time zone), and against stronger or weaker opponents (the rating gap in rated games, in bands of 100). Focus or hover a row for the exact counts. |
+| Most-played openings | Your ten most frequent openings with their results. They're named once opening names are imported (Phase 13); otherwise they're shown by the first moves. |
+| Accuracy | Average accuracy, accuracy in the opening, middlegame and endgame, and blunders, mistakes (with misses) and inaccuracies per game. This is from reviews saved with your games, and an accuracy line over time appears once you have two reviewed games. |
+| Time | Average time per move for each speed, and how often you were in time trouble (under 10% of your starting clock), with how those games ended. |
+
+**Privacy.** Insights are private by default: only you see yours. **Let anyone see my insights** in your account settings makes them public. Guests and other players get a "keeps their insights private" message.
+
+**How it works:**
+- **Computing:** the server works insights out from your latest 2,000 games, their saved reviews and the opening names, and keeps the result until you finish another game or save another review.
+- **Clock times:** from this phase on, each online game also saves the time left after every move. Older games count everywhere except the Time card.
+- **Charts:** they're drawn in SVG by this app. Their colours were checked for colour-blind separation and contrast in both themes, and each chart has a table or keyboard-readable view.
+
 ## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
@@ -351,7 +370,8 @@ src/
     view.ts       clock countdown, replaying moves, PGN export
   components/online/  OnlineView, Lobby, OnlineGame, Tournaments (list and create form), TournamentPage, Leaderboard
   account/api.ts  calls to the account API
-  components/account/  AccountDialog (sign in / create account), ProfileView, AccountSettings
+  components/account/  AccountDialog (sign in / create account), ProfileView, AccountSettings, InsightsView
+  components/charts/   LineChart, ResultBars and their scale helpers (SVG, drawn by this app)
   App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
 server/         the server (Node, run directly from TypeScript)
   backend.ts    opens the database and wires the API and game server together
@@ -366,6 +386,7 @@ server/         the server (Node, run directly from TypeScript)
   puzzleDashboard.ts  dashboard statistics (strengths, improvement areas, chart, history)
   analysisQueue.ts  optional server-side game analysis: the queue, and saving the result as a review
   analysisWorker.ts the worker thread that runs the engine over a game
+  insights/     insights.ts (the numbers, pure), insightsData.ts (loading and caching them)
   explorer/     explorerStore.ts (move counts, My games, opening names, book moves), importer.ts,
                 pgnGames.ts (reads large PGN files and replays SAN quickly on the engine board)
   tournament/   manager.ts (lifecycle, timers, live pages), arena.ts (scoring, pairing),
@@ -383,6 +404,7 @@ scripts/smoke-server-analysis.ts  end-to-end check of the server analysis queue 
 scripts/engine-match.ts  plays the engine against a committed version of itself, or each level against the next
 scripts/import-explorer.ts, import-openings.ts, index-site-explorer.ts  the explorer's importers (npm run explorer:import, openings:import, explorer:index-site)
 scripts/smoke-explorer.ts  end-to-end check of the explorer tabs, opening names and book moves
+scripts/smoke-insights.ts  end-to-end check of insights: games with clocks, a review, private then public
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -457,6 +479,7 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Secondary engine lines are shallower than the best line,** and their continuations can be short. Each extra line is searched separately with the remaining moves.
 - **Threads share the first moves, not memory.** Workers can't share a transposition table without cross-origin isolation headers, so more threads search each share deeper but don't combine their knowledge, and the reported depth is the shallowest worker's.
 - **The threat search starts fresh** from the position with the other side to move, so it doesn't see repetitions in the game so far.
+- **Insights only cover online games played while signed in,** and the Time card only games from Phase 14 on (when clock times started being saved). Berserk games in tournaments count time trouble against the full starting clock.
 - **No endgame tablebases.** Server-side analysis exists but is off unless the server is started with `ANALYSIS_QUEUE=1`, and its queue lives in memory: a restart drops games still waiting.
 - **Drawn shapes need a mouse.** Touch screens can't right-click, so there's no way to draw on a phone or tablet yet.
 - **The analysis tree is not saved.** It's lost on reload; export the PGN to keep it.

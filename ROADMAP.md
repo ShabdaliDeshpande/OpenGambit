@@ -91,12 +91,12 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Importers the user runs on files they download: `npm run explorer:import -- path/to/games.pgn` and `npm run openings:import -- path/to/openings.tsv`.
 - Endgame tablebases (Syzygy files the user supplies) were a stretch goal. **Decided:** left out for now and listed under Known gaps, because a reader for the file format is as much work as the rest of the phase.
 
-## Phase 14: Insights (planned)
+## Phase 14: Insights (done)
 - Rating history; results by colour, opening, time control, time of day and opponent rating.
 - Accuracy over time and per phase; blunders per game (from saved reviews).
 - Average time per move and time trouble. Per-move clock times are stored from this phase on.
 - Most-played openings.
-- Needs an account.
+- Needs an account. **Decided:** private by default, with a setting to make them public.
 
 ## Phase 15: Learning (planned)
 - Original interactive lessons, timed drills, and endgame practice against the engine.

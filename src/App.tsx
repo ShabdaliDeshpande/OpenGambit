@@ -7,18 +7,25 @@ import { linkedPuzzle, linkedPuzzleMode, PuzzleView } from './components/puzzles
 import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
 import { ProfileView } from './components/account/ProfileView';
+import { InsightsView } from './components/account/InsightsView';
 import { opposite } from './chess/clock';
 import type { GameSetup } from './chess/game';
 import { useAccount } from './hooks/useAccount';
 import { useTheme } from './hooks/useTheme';
 import { useSoundSetting } from './hooks/useGameSounds';
 
-type Tab = 'play' | 'online' | 'puzzles' | 'analysis' | 'profile';
+type Tab = 'play' | 'online' | 'puzzles' | 'analysis' | 'profile' | 'insights';
 
 const TABS = ['play', 'online', 'puzzles', 'analysis'] as const;
 const TAB_LABEL: Record<(typeof TABS)[number], string> = { play: 'Play', online: 'Play online', puzzles: 'Puzzles', analysis: 'Analysis board' };
 
 const USERNAME = /^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$/;
+
+/** A player's insights named by an `?insights=<name>` link, if any. */
+function linkedInsights(): string | null {
+  const name = new URLSearchParams(window.location.search).get('insights');
+  return name && USERNAME.test(name) ? name : null;
+}
 
 /** A profile named by a `?user=<name>` link, if any. */
 function linkedProfile(): string | null {
@@ -28,8 +35,9 @@ function linkedProfile(): string | null {
 
 export default function App() {
   const [profileName, setProfileName] = useState<string | null>(linkedProfile);
+  const [insightsName, setInsightsName] = useState<string | null>(linkedInsights);
   const [tab, setTab] = useState<Tab>(() =>
-    linkedProfile() ? 'profile' : linkedOnline() ? 'online' : linkedPuzzle() || linkedPuzzleMode() ? 'puzzles' : 'play',
+    linkedInsights() ? 'insights' : linkedProfile() ? 'profile' : linkedOnline() ? 'online' : linkedPuzzle() || linkedPuzzleMode() ? 'puzzles' : 'play',
   );
   const [playOrientation, setPlayOrientation] = useState<Color>('w');
   const [analysisOrientation, setAnalysisOrientation] = useState<Color>('w');
@@ -55,19 +63,31 @@ export default function App() {
     window.history.pushState(null, '', `?user=${encodeURIComponent(name)}`);
   };
 
+  const openInsights = (name: string) => {
+    setInsightsName(name);
+    setTab('insights');
+    window.history.pushState(null, '', `?insights=${encodeURIComponent(name)}`);
+  };
+
   const chooseTab = (t: Tab) => {
-    // leaving a profile link: drop it from the address bar
-    if (tab === 'profile' && t !== 'profile') window.history.pushState(null, '', window.location.pathname);
+    // leaving a profile or insights link: drop it from the address bar
+    if ((tab === 'profile' || tab === 'insights') && t !== tab) window.history.pushState(null, '', window.location.pathname);
     setTab(t);
   };
 
   useEffect(() => {
     const onPop = () => {
+      const insights = linkedInsights();
+      if (insights) {
+        setInsightsName(insights);
+        setTab('insights');
+        return;
+      }
       const name = linkedProfile();
       if (name) {
         setProfileName(name);
         setTab('profile');
-      } else setTab(t => (t === 'profile' ? 'play' : t));
+      } else setTab(t => (t === 'profile' || t === 'insights' ? 'play' : t));
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -171,6 +191,7 @@ export default function App() {
           username={profileName}
           meId={me?.id ?? null}
           onOpenProfile={openProfile}
+          onOpenInsights={openInsights}
           onAnalyse={analyse}
           onAccountDeleted={() => {
             account.forget();
@@ -178,6 +199,7 @@ export default function App() {
           }}
         />
       )}
+      {tab === 'insights' && insightsName && <InsightsView key={insightsName} username={insightsName} meName={me?.username ?? null} onOpenProfile={openProfile} />}
     </div>
   );
 }

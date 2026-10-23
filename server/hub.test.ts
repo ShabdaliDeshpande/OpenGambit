@@ -391,3 +391,22 @@ describe('disconnects', () => {
     expect(a.game()).toMatchObject({ opponentGone: null, canAbort: true });
   });
 });
+
+describe('clocks for insights', () => {
+  it('records the mover’s time left after each move', () => {
+    const { pair } = testHub();
+    const { a, b, move, room } = pair('5+0');
+    move(a, 'e2e4');
+    move(b, 'e7e5');
+    vi.advanceTimersByTime(3_000);
+    move(a, 'g1f3');
+    vi.advanceTimersByTime(7_000);
+    move(b, 'b8c6');
+    // the clock starts with the second move of each side
+    const c = room().clocks;
+    expect(c.slice(0, 2)).toEqual([300_000, 300_000]);
+    expect(c[2]!).toBeLessThanOrEqual(297_000);
+    expect(c[2]!).toBeGreaterThan(296_000);
+    expect(c[3]!).toBeLessThanOrEqual(293_000);
+  });
+});

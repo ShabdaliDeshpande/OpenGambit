@@ -31,6 +31,8 @@ export interface GameRecord {
   category: Speed;
   rated: boolean;
   moves: string[];
+  /** The mover's remaining time in ms after each move (games from Phase 14 on). */
+  clocks?: number[] | null;
   result: '1-0' | '0-1' | '1/2-1/2';
   reason: string;
   startedAt: number;
@@ -105,6 +107,7 @@ interface GameRow {
   started_at: number;
   ended_at: number;
   tournament_id: string | null;
+  clocks?: string | null;
   /** Present when the query joins game_reviews. */
   white_accuracy?: number | null;
   black_accuracy?: number | null;
@@ -123,6 +126,7 @@ const toGame = (r: GameRow): StoredGame => ({
   category: r.category,
   rated: Number(r.rated) === 1,
   moves: r.moves ? r.moves.split(' ') : [],
+  clocks: r.clocks ? r.clocks.split(' ').map(Number) : null,
   result: r.result,
   reason: r.reason,
   whiteRating: r.white_rating,
@@ -408,8 +412,8 @@ export class Store {
       const diff = (side: 'white' | 'black') => (change ? Math.round(change[side].after.rating) - Math.round(change[side].before.rating) : null);
       await tx.run(
         `INSERT INTO games (id, white_id, black_id, white_name, black_name, tc, category, rated, moves, result, reason,
-           white_rating, black_rating, white_diff, black_diff, started_at, ended_at, tournament_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           white_rating, black_rating, white_diff, black_diff, started_at, ended_at, tournament_id, clocks)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           game.id,
           game.whiteId,
@@ -429,6 +433,7 @@ export class Store {
           game.startedAt,
           game.endedAt,
           game.tournamentId ?? null,
+          game.clocks?.length === game.moves.length ? game.clocks.map(c => Math.max(0, Math.round(c))).join(' ') : null,
         ],
       );
       // the opening explorer counts every finished game from the standard start
@@ -626,5 +631,15 @@ export class Store {
   async countGames(userId: string): Promise<number> {
     const row = await this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM games WHERE white_id = ? OR black_id = ?', [userId, userId]);
     return Number(row?.n ?? 0);
+  }
+
+  /** Whether anyone may see this player's insights (private by default). */
+  async insightsPublic(userId: string): Promise<boolean> {
+    const row = await this.db.get<{ insights_public: number }>('SELECT insights_public FROM users WHERE id = ?', [userId]);
+    return Number(row?.insights_public ?? 0) === 1;
+  }
+
+  async setInsightsPublic(userId: string, on: boolean): Promise<void> {
+    await this.db.run('UPDATE users SET insights_public = ? WHERE id = ?', [on ? 1 : 0, userId]);
   }
 }

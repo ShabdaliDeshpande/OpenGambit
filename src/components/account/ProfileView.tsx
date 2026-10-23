@@ -41,9 +41,11 @@ interface Props {
   onOpenProfile: (name: string) => void;
   onAnalyse: (pgn: string, game?: AnalysedGame) => void;
   onAccountDeleted: () => void;
+  /** Opens this player's insights. */
+  onOpenInsights?: (name: string) => void;
 }
 
-export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccountDeleted }: Props) {
+export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccountDeleted, onOpenInsights }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [games, setGames] = useState<PublicGame[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +129,11 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccoun
     <main className="profile">
       <section className="panel">
         <h2 className="profile-name">{subject.username}</h2>
+        {onOpenInsights && (
+          <button type="button" onClick={() => onOpenInsights(subject.username)} title={meId === subject.id ? 'Your insights' : 'Insights, if this player made them public'}>
+            📈 Insights
+          </button>
+        )}
         <p className="muted">
           Joined {dateText(subject.createdAt)} · {profile.totalGames} game{profile.totalGames === 1 ? '' : 's'}
         </p>

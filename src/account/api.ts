@@ -28,7 +28,45 @@ export interface Me {
   username: string;
   ratings: Record<Category, PublicRating>;
   puzzleRating: ShownRatingWithDeviation;
+  /** Anyone may see this player's insights. */
+  insightsPublic?: boolean;
 }
+
+export interface Bucket {
+  label: string;
+  win: number;
+  draw: number;
+  loss: number;
+}
+
+export interface Insights {
+  games: number;
+  rating: Record<string, { t: number; rating: number }[]>;
+  results: { byColor: Bucket[]; bySpeed: Bucket[]; byTimeControl: Bucket[]; byTimeOfDay: Bucket[]; byOpponent: Bucket[] };
+  openings: Bucket[];
+  accuracy: {
+    reviewed: number;
+    overTime: { t: number; accuracy: number }[];
+    average: number | null;
+    byPhase: Record<'opening' | 'middlegame' | 'endgame', number | null>;
+    blunders: number | null;
+    mistakes: number | null;
+    inaccuracies: number | null;
+  };
+  time: {
+    games: number;
+    perMove: { label: string; seconds: number; games: number }[];
+    trouble: Bucket & { games: number; share: number | null };
+  };
+}
+
+export const fetchInsights = async (username: string, q: { speed?: Category | null; since?: number | null } = {}) => {
+  const params = new URLSearchParams({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' });
+  if (q.speed) params.set('speed', q.speed);
+  if (q.since) params.set('since', String(q.since));
+  return (await call<{ insights: Insights }>(`/api/insights/${encodeURIComponent(username)}?${params}`)).insights;
+};
+export const setInsightsPublic = (on: boolean) => call<{ insightsPublic: boolean }>('/api/account/insights', { public: on });
 
 export interface GameSide {
   id: string | null;
