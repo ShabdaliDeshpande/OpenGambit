@@ -677,6 +677,42 @@ button.analyse-game {
   fill: rgba(30, 110, 230, 0.35);
 }
 
+.arrow.threat {
+  stroke: rgba(205, 50, 50, 0.7);
+  stroke-dasharray: 0.25 0.15;
+}
+
+.arrowhead.threat {
+  fill: rgba(205, 50, 50, 0.7);
+}
+
+/* shapes drawn by the user with the right mouse button */
+.arrow.green,
+.arrow.red,
+.arrow.blue,
+.arrow.yellow {
+  stroke-width: 0.15;
+}
+
+.arrow.green { stroke: rgba(34, 140, 70, 0.78); }
+.arrow.red { stroke: rgba(200, 45, 45, 0.78); }
+.arrow.blue { stroke: rgba(40, 95, 200, 0.78); }
+.arrow.yellow { stroke: rgba(215, 160, 20, 0.85); }
+.arrowhead.green { fill: rgba(34, 140, 70, 0.78); }
+.arrowhead.red { fill: rgba(200, 45, 45, 0.78); }
+.arrowhead.blue { fill: rgba(40, 95, 200, 0.78); }
+.arrowhead.yellow { fill: rgba(215, 160, 20, 0.85); }
+
+.drawn-circle {
+  fill: none;
+  stroke-width: 0.07;
+}
+
+.drawn-circle.green { stroke: rgba(34, 140, 70, 0.85); }
+.drawn-circle.red { stroke: rgba(200, 45, 45, 0.85); }
+.drawn-circle.blue { stroke: rgba(40, 95, 200, 0.85); }
+.drawn-circle.yellow { stroke: rgba(215, 160, 20, 0.9); }
+
 .engine-head {
   display: flex;
   align-items: center;
@@ -692,6 +728,45 @@ button.analyse-game {
 .lines-select select {
   width: auto;
   padding: 3px 6px;
+}
+
+.engine-gear {
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.engine-settings {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.engine-settings .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.engine-settings input[type='range'] {
+  flex: 1;
+  min-width: 100px;
+}
+
+.engine-settings output {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.threat-line {
+  margin: 6px 0 0;
+  color: var(--danger);
 }
 
 .switch {

@@ -11,7 +11,10 @@ import { fromStoredReview, toStoredReview } from '../../analysis/savedReview';
 import { formatEval } from '../../analysis/evalFormat';
 import { mainlinePositions, REVIEW_ENGINE, REVIEW_MS, useGameReview, type PositionEval } from '../../hooks/useGameReview';
 import { evaluateOnce } from '../../hooks/evaluateOnce';
-import { fetchReview, saveReview, ApiError } from '../../account/api';
+import { fetchReview, fetchServerAnalysis, requestServerAnalysis, saveReview, ApiError, type ServerAnalysis } from '../../account/api';
+import { availableThreads, checkSettings, searchLimits, type EngineSettings } from '../../analysis/engineSettings';
+import { threatFen } from '../../analysis/rootSplit';
+import type { Shape } from '../../analysis/shapes';
 import type { UciMove } from '../../engine/search';
 import { Board, type Arrow } from '../Board';
 import { PgnFenPanel } from '../PgnFenPanel';
@@ -69,6 +72,21 @@ interface Props {
   request: AnalysisRequest | null;
 }
 
+/** What the review panel says about server analysis (null when the server doesn't offer it). */
+function serverText(s: ServerAnalysis | null, complete: boolean): { text: string | null; canRequest: boolean } | null {
+  if (!s?.enabled) return null;
+  switch (s.status) {
+    case 'queued':
+      return { text: `Waiting for the server: number ${s.position} in the queue.`, canRequest: false };
+    case 'running':
+      return { text: `The server is analysing: position ${s.done} of ${s.total}.`, canRequest: false };
+    case 'failed':
+      return { text: 'The server analysis failed. You can review the game here instead.', canRequest: !complete };
+    default:
+      return { text: null, canRequest: s.status === 'none' && !complete };
+  }
+}
+
 const turnOf = (fen: string): Color => (fen.split(' ')[1] === 'b' ? 'b' : 'w');
 
 const showScore = (s: Score) =>
@@ -76,13 +94,14 @@ const showScore = (s: Score) =>
 
 export function AnalysisView({ active, orientation, onFlip, request }: Props) {
   const [state, dispatch] = useReducer(analysisReducer, undefined, initialAnalysis);
-  const [engineOn, setEngineOn] = useState<boolean>(() => loadPref(ENGINE_KEY, { on: true, lines: 3 }).on);
-  const [multiPv, setMultiPv] = useState<number>(() => loadPref(ENGINE_KEY, { on: true, lines: 3 }).lines);
+  const maxThreads = useMemo(() => availableThreads(), []);
+  // older versions stored only { on, lines }; checkSettings fills in the rest
+  const [settings, setSettings] = useState<EngineSettings>(() => checkSettings(loadPref(ENGINE_KEY, null), maxThreads));
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    savePref(ENGINE_KEY, { on: engineOn, lines: multiPv });
-  }, [engineOn, multiPv]);
+    savePref(ENGINE_KEY, settings);
+  }, [settings]);
 
   const { root } = state.tree;
   const review = useGameReview(root);
@@ -122,6 +141,40 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
       cancelled = true;
     };
   }, [request]);
+
+  // optional server-side analysis, when the server has it switched on
+  const [server, setServer] = useState<ServerAnalysis | null>(null);
+  useEffect(() => {
+    setServer(null);
+    if (!game?.canSave) return;
+    let cancelled = false;
+    fetchServerAnalysis(game.id)
+      .then(s => !cancelled && setServer(s))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [game]);
+  // while it waits or runs, check every few seconds, and load the review once it's done
+  useEffect(() => {
+    if (!game || (server?.status !== 'queued' && server?.status !== 'running')) return;
+    const t = setTimeout(() => {
+      fetchServerAnalysis(game.id)
+        .then(s => {
+          setServer(s);
+          if (s.status === 'done') void fetchReview(game.id).then(saved => saved && setSavedEvals(fromStoredReview(saved)));
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [game, server]);
+  const requestServer = () => {
+    if (!game) return;
+    review.stop();
+    requestServerAnalysis(game.id)
+      .then(setServer)
+      .catch((e: unknown) => setSavedNote(`Couldn’t start the server analysis: ${e instanceof Error ? e.message : String(e)}`));
+  };
 
   // the board has the game by now: use the saved evaluations, or review it if they don't fit
   useEffect(() => {
@@ -214,18 +267,32 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
 
   const node = nodeAt(root, state.path) ?? root;
   const target = useMemo(
-    () => ({ startFen: root.fen, moves: movesAlong(root, state.path), key: `${root.fen}|${state.path.join(' ')}` }),
-    [root, state.path],
+    () => ({ startFen: root.fen, moves: movesAlong(root, state.path), fen: node.fen, key: `${root.fen}|${state.path.join(' ')}` }),
+    [root, state.path, node.fen],
   );
   // the engine keeps quiet while you retry, so it doesn't give the answer away
-  const showEngine = engineOn && !retry;
-  const analysis = useAnalysis(target, active && showEngine, { multiPv });
+  const showEngine = settings.on && !retry;
+  const limits = searchLimits(settings);
+  const analysis = useAnalysis(target, active && showEngine, { multiPv: settings.lines, ...limits, threads: settings.threads });
   const lines = analysis.info?.lines ?? [];
+
+  // threat mode: the best move for the other side, as if this side passed
+  const threatPosition = showEngine && settings.threat ? threatFen(node.fen) : null;
+  const threatTarget = useMemo(
+    () => ({ startFen: threatPosition ?? node.fen, moves: [], fen: threatPosition ?? node.fen, key: `threat|${threatPosition}` }),
+    [threatPosition, node.fen],
+  );
+  const threat = useAnalysis(threatTarget, active && !!threatPosition, { multiPv: 1, maxDepth: limits.maxDepth, maxMs: Math.min(limits.maxMs, 5_000) });
+  const threatMove = threat.info?.lines[0]?.pv[0];
 
   const arrows: Arrow[] = useMemo(() => {
     if (!showEngine) return [];
-    return lines.slice(0, 2).flatMap((l, i) => (l.pv[0] ? [{ from: l.pv[0].from, to: l.pv[0].to, tone: i === 0 ? 'best' : 'alt' } as Arrow] : []));
-  }, [lines, showEngine]);
+    const best = settings.arrows.best
+      ? lines.slice(0, 2).flatMap((l, i) => (l.pv[0] ? [{ from: l.pv[0].from, to: l.pv[0].to, tone: i === 0 ? 'best' : 'alt' } as Arrow] : []))
+      : [];
+    const threats = settings.arrows.threat && threatPosition && threatMove ? [{ from: threatMove.from, to: threatMove.to, tone: 'threat' } as Arrow] : [];
+    return [...best, ...threats];
+  }, [lines, showEngine, settings.arrows, threatPosition, threatMove]);
 
   const onMove = useCallback(
     (from: Square, to: Square, promotion?: PieceSymbol) =>
@@ -304,17 +371,20 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
           lastMove={retry ? null : node.uci ? { from: node.uci.from, to: node.uci.to } : null}
           onMove={retry ? tryMove : onMove}
           arrows={arrows}
+          shapes={settings.arrows.drawn && !retry ? (node.shapes ?? []) : []}
+          {...(settings.arrows.drawn && !retry ? { onShapes: (shapes: Shape[]) => dispatch({ type: 'shapes', shapes }) } : {})}
         />
       </div>
 
       <aside className="side">
         <EngineLines
           fen={node.fen}
-          enabled={showEngine}
-          multiPv={multiPv}
+          settings={settings}
+          onSettings={setSettings}
+          maxThreads={maxThreads}
           analysis={analysis}
-          onToggle={() => setEngineOn(on => !on)}
-          onMultiPv={setMultiPv}
+          threat={threatPosition ? { fen: threatPosition, analysis: threat } : null}
+          paused={!!retry}
           onPlayLine={pv => dispatch({ type: 'play', moves: pv })}
         />
 
@@ -330,6 +400,8 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
           retryCounts={retryCounts}
           retry={retry}
           savedNote={savedNote}
+          server={serverText(server, !!summary?.complete)}
+          onServer={requestServer}
           onStart={review.start}
           onStop={review.stop}
           onJump={jump}

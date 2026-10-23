@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { AnalysisQueue } from './analysisQueue.ts';
 import { createApi } from './api.ts';
 import { openDatabase } from './db/db.ts';
 import { Store } from './store.ts';
@@ -22,7 +23,10 @@ export async function startBackend(env: Record<string, string | undefined> = pro
   const store = new Store(db);
   await store.pruneSessions();
   const trustProxy = env.TRUST_PROXY === '1';
-  const { handler, identify } = createApi(store, { trustProxy });
+  // server-side analysis is opt-in: it keeps a CPU core busy while games are queued
+  const analysis = env.ANALYSIS_QUEUE === '1' ? new AnalysisQueue(store, undefined, { ms: Number(env.ANALYSIS_MS) || 600 }) : null;
+  if (analysis) console.log(`Server analysis: on (${analysis.ms} ms per position)`);
+  const { handler, identify } = createApi(store, { trustProxy, analysis });
   console.log(`Database: ${db.engine === 'postgres' ? 'PostgreSQL (DATABASE_URL)' : `SQLite (${env.SQLITE_PATH ?? 'data/chess.db'})`}`);
   return {
     store,

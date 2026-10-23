@@ -411,6 +411,7 @@ These sections plan the features the brief lists from chess.com's public feature
   - `scripts/engine-match.ts` plays the new engine against the current one from our own start positions and reports the score.
   - Unit tests use original mate and tactic positions.
   - The 8 levels are re-tuned so they stay spread out.
+  - **Result (built):** +20 =3 −1 against the Phase 11 engine at 150 ms a move (89.6%, about +370 Elo). In a 2-game-per-pair ladder, each level beat the one below it.
 - **Opening book.** I propose moving it to Phase 13, since it needs the same imported games as the explorer (see "Order" below).
 - **Server analysis queue (optional, off by default).**
   - `ANALYSIS_QUEUE=1` runs our engine in a Node worker thread, one game at a time, for signed-in players who ask for it.

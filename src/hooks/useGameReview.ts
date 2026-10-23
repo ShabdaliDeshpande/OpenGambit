@@ -12,7 +12,7 @@ export type { PositionEval } from '../analysis/gameReview';
 export const REVIEW_MS = 600;
 
 /** Names the engine settings saved with a review. */
-export const REVIEW_ENGINE = 'opengambit-1 multipv2';
+export const REVIEW_ENGINE = 'opengambit-2 multipv2';
 
 /** Moves kept from each engine line (enough for explanations). */
 const PV_KEEP = 8;

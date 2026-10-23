@@ -7,14 +7,15 @@ import { PromotionPicker } from './PromotionPicker';
 import { moveSoundFor, slidesFor } from '../chess/animation';
 import { playSound } from '../sound/sounds';
 import { premoveDests, type Premove } from '../chess/premove';
+import { BRUSHES, brushFor, toggleShape, type Brush, type Shape } from '../analysis/shapes';
 
 const FILES = 'abcdefgh';
 
 export interface Arrow {
   from: Square;
   to: Square;
-  /** 'best' is drawn strong, 'alt' faint. */
-  tone: 'best' | 'alt';
+  /** 'best' is drawn strong, 'alt' faint, 'threat' in red. */
+  tone: 'best' | 'alt' | 'threat';
 }
 
 export interface BoardProps {
@@ -32,6 +33,10 @@ export interface BoardProps {
   premove?: Premove | null;
   onPremove?: (pm: Premove) => void;
   onCancelPremove?: () => void;
+  /** Arrows and circles drawn by the user (right-click to draw; left click clears). */
+  shapes?: Shape[];
+  /** Set to let the user draw; called with the new list of shapes. */
+  onShapes?: (shapes: Shape[]) => void;
 }
 
 const SLIDE_MS = 200;
@@ -44,32 +49,42 @@ function squareCenter(sq: Square, orientation: Color) {
   return orientation === 'w' ? { x: file + 0.5, y: 7 - rank + 0.5 } : { x: 7 - file + 0.5, y: rank + 0.5 };
 }
 
-function ArrowLayer({ arrows, orientation }: { arrows: Arrow[]; orientation: Color }) {
+const TONES = ['best', 'alt', 'threat', ...BRUSHES] as const;
+
+function ArrowLine({ from, to, tone, orientation }: { from: Square; to: Square; tone: Arrow['tone'] | Brush; orientation: Color }) {
+  const a = squareCenter(from, orientation);
+  const b = squareCenter(to, orientation);
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const shorten = 0.3 / len; // stop short so the head sits on the target square
+  return (
+    <line
+      className={`arrow ${tone}`}
+      x1={a.x}
+      y1={a.y}
+      x2={b.x - (b.x - a.x) * shorten}
+      y2={b.y - (b.y - a.y) * shorten}
+      markerEnd={`url(#arrowhead-${tone})`}
+    />
+  );
+}
+
+function ArrowLayer({ arrows, shapes, orientation }: { arrows: Arrow[]; shapes: Shape[]; orientation: Color }) {
   return (
     <svg className="arrows" viewBox="0 0 8 8" aria-hidden="true">
       <defs>
-        {(['best', 'alt'] as const).map(tone => (
+        {TONES.map(tone => (
           <marker key={tone} id={`arrowhead-${tone}`} viewBox="0 0 4 4" markerWidth="2.6" markerHeight="2.6" refX="2" refY="2" orient="auto">
             <path d="M0,0 L4,2 L0,4 z" className={`arrowhead ${tone}`} />
           </marker>
         ))}
       </defs>
-      {arrows.map(({ from, to, tone }) => {
-        const a = squareCenter(from, orientation);
-        const b = squareCenter(to, orientation);
-        const len = Math.hypot(b.x - a.x, b.y - a.y);
-        const shorten = 0.3 / len; // stop short so the head sits on the target square
-        return (
-          <line
-            key={`${from}${to}${tone}`}
-            className={`arrow ${tone}`}
-            x1={a.x}
-            y1={a.y}
-            x2={b.x - (b.x - a.x) * shorten}
-            y2={b.y - (b.y - a.y) * shorten}
-            markerEnd={`url(#arrowhead-${tone})`}
-          />
-        );
+      {arrows.map(({ from, to, tone }) => (
+        <ArrowLine key={`${from}${to}${tone}`} from={from} to={to} tone={tone} orientation={orientation} />
+      ))}
+      {shapes.map(s => {
+        if (s.dest) return <ArrowLine key={`d${s.orig}${s.dest}`} from={s.orig} to={s.dest} tone={s.brush} orientation={orientation} />;
+        const c = squareCenter(s.orig, orientation);
+        return <circle key={`c${s.orig}`} className={`drawn-circle ${s.brush}`} cx={c.x} cy={c.y} r={0.44} />;
       })}
     </svg>
   );
@@ -111,11 +126,15 @@ export function Board({
   premove = null,
   onPremove,
   onCancelPremove,
+  shapes = [],
+  onShapes,
 }: BoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<Square | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [promotion, setPromotion] = useState<{ from: Square; to: Square } | null>(null);
+  // a shape being drawn with the right mouse button
+  const [drawing, setDrawing] = useState<{ orig: Square; dest: Square; brush: Brush; pointerId: number } | null>(null);
   const [slides, setSlides] = useState<{ id: number; offsets: Map<Square, { dx: number; dy: number }> } | null>(null);
   const prevFen = useRef<string | null>(null);
   const droppedMove = useRef<string | null>(null);
@@ -201,9 +220,19 @@ export function Board({
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button === 2 && onShapes && !promotion) {
+      const hit = pointToSquare(e.clientX, e.clientY);
+      if (!hit?.square) return;
+      e.preventDefault();
+      boardRef.current?.setPointerCapture?.(e.pointerId);
+      setDrawing({ orig: hit.square, dest: hit.square, brush: brushFor(e), pointerId: e.pointerId });
+      return;
+    }
     if (e.button !== 0 || promotion) return;
     const hit = pointToSquare(e.clientX, e.clientY);
     if (!hit?.square) return;
+    // a left click clears the drawn shapes
+    if (onShapes && shapes.length) onShapes([]);
     const sq = hit.square;
     if (selected && sq !== selected && tryMove(selected, sq)) return;
     if (dests.has(sq)) {
@@ -219,12 +248,22 @@ export function Board({
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (drawing && e.pointerId === drawing.pointerId) {
+      const hit = pointToSquare(e.clientX, e.clientY);
+      if (hit?.square && hit.square !== drawing.dest) setDrawing({ ...drawing, dest: hit.square });
+      return;
+    }
     if (!drag || e.pointerId !== drag.pointerId) return;
     const hit = pointToSquare(e.clientX, e.clientY);
     if (hit) setDrag({ ...drag, x: hit.x, y: hit.y, moved: true });
   };
 
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (drawing && e.pointerId === drawing.pointerId) {
+      setDrawing(null);
+      onShapes?.(toggleShape(shapes, { orig: drawing.orig, dest: drawing.dest, brush: drawing.brush }));
+      return;
+    }
     if (!drag || e.pointerId !== drag.pointerId) return;
     const hit = pointToSquare(e.clientX, e.clientY);
     setDrag(null);
@@ -277,8 +316,13 @@ export function Board({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={() => setDrag(null)}
+      onPointerCancel={() => {
+        setDrag(null);
+        setDrawing(null);
+      }}
       onContextMenu={e => {
+        // the right button draws on boards that allow it
+        if (onShapes) e.preventDefault();
         // right-click cancels a premove
         if (premove || selected) {
           e.preventDefault();
@@ -290,7 +334,13 @@ export function Board({
       aria-label="Chess board"
     >
       {squares}
-      {arrows.length > 0 && <ArrowLayer arrows={arrows} orientation={orientation} />}
+      {(arrows.length > 0 || shapes.length > 0 || drawing) && (
+        <ArrowLayer
+          arrows={arrows}
+          shapes={drawing ? [...shapes, { orig: drawing.orig, ...(drawing.dest !== drawing.orig ? { dest: drawing.dest } : {}), brush: drawing.brush }] : shapes}
+          orientation={orientation}
+        />
+      )}
       {drag && dragPiece && (
         <div className="drag-piece" style={{ left: `${drag.x * 100}%`, top: `${drag.y * 100}%` }}>
           <Piece color={dragPiece.color} type={dragPiece.type} />

@@ -39,7 +39,7 @@ Open it from the **Analysis board** tab, or press **Analyse this game** on the P
 |---|---|
 | Move tree | Play moves on the board to add them. A move from an earlier position starts a variation, and replaying an existing move just follows it. Click any move to jump there; ←/→ step through, and Home/End go to the start or the end of the current line. |
 | Editing lines | **Promote** moves a variation up one level, **Main line** makes it the main line, and **Delete from here** removes a move and everything after it |
-| Engine | Runs in a Web Worker and restarts on every position change. Shows 1–5 best lines (multi-PV) with depth and speed, an eval bar on the board, and arrows for the best and second-best moves. Click any move in an engine line to play the line up to that move into the tree. The engine on/off switch and line count are remembered. |
+| Engine | Runs in Web Workers and restarts on every position change. Shows 1–5 best lines (multi-PV) with depth and speed, an eval bar on the board, and arrows for the best and second-best moves. Click any move in an engine line to play the line up to that move into the tree. Search time, depth, threads, threat mode and arrows are set under ⚙ (Phase 12) and remembered. |
 | Annotations | Move glyphs (!, ?, !!, ??, !?, ?!) and position glyphs (+−, ±, ⩲, =, ∞, ⩱, ∓, −+), plus a comment on any move |
 | PGN | Import and export keep variations (nested to any depth), comments and glyphs. Load a FEN to analyse from any position. |
 
@@ -83,11 +83,11 @@ The script streams the file, so very large files are fine, and it reads `.zst` d
 | 3 | 2 | 0.6 s | ±120 cp |
 | 4 | 3 | 0.8 s | ±60 cp |
 | 5 | 4 | 1.2 s | ±30 cp |
-| 6 | 4 | 1.5 s | ±12 cp |
-| 7 | 5 | 2 s | none |
-| 8 | up to 12 (reaches about 6 in middlegames) | 4 s | none |
+| 6 | 5 | 1.5 s | ±12 cp |
+| 7 | 6 | 2 s | none |
+| 8 | up to 20 (as deep as 4 s allows) | 4 s | none |
 
-All levels play a forced mate when they see one. The computer accepts a draw offer only when it judges its own position to be at least 1.5 pawns worse.
+Each level beat the one below it in `npm run engine:match -- --ladder` (Phase 12). All levels play a forced mate when they see one. The computer accepts a draw offer only when it judges its own position to be at least 1.5 pawns worse.
 
 ## Features (Phase 4: Online play)
 
@@ -221,6 +221,35 @@ On the analysis board, **📊 Review game** runs the engine over every position 
 - **Estimated performance:** a fixed curve from accuracy to a rating, nudged a quarter of the way towards the opponent's rating when it's known (at most 200 points). It's a rough estimate, not a rating, and is left out below 8 moves.
 - **Saved reviews:** the server checks a saved review against the stored game and works out the accuracy itself from the scores. It keeps the review that gave the engine more time.
 
+## Features (Phase 12: Analysis settings and a stronger engine)
+
+On the analysis board, **⚙** next to the engine switch opens the engine settings. They're remembered in the browser.
+
+| Setting | What it does |
+|---|---|
+| Search by time or depth | Time per position from 1 to 30 s (default 15 s), or a fixed depth from 1 to 30. |
+| Infinite analysis | Keeps searching until you move to another position. |
+| Lines | 1 to 5 engine lines. |
+| Threads | How many engine workers share the search, up to one less than your device's cores. Each worker takes a share of the first moves, and their lines are merged. |
+| Show threat | Also analyses the position as if it were the other side's move, and shows what they'd play: a red dashed arrow and a **Threat:** line under the engine lines. It's off while you're in check. |
+| Arrows | Turn the best-move arrows, the threat arrow and your drawn shapes on or off. |
+
+**Drawing on the board:**
+- **Arrows and circles:** right-click and drag to draw an arrow; right-click a square to circle it.
+- **Colours:** hold Shift, Alt or Ctrl (⌘ on a Mac) for red, blue or yellow instead of green.
+- **Removing:** drawing the same shape again removes it, and a left click clears them all.
+- **Saving:** shapes belong to the move you drew them on. They're saved in the PGN as `[%cal …]` (arrows) and `[%csl …]` (circles) comments, which most chess software reads, and loaded back from PGNs that have them.
+
+**A stronger engine** (still this app's own code):
+- **Search:** principal variation search, null-move pruning, late-move reductions, history move ordering and aspiration windows. The quiescence search now also answers checks.
+- **Evaluation:** it now blends middlegame and endgame values as pieces come off. It counts pawn structure (passed, doubled and isolated pawns), piece mobility, the pawn shelter in front of a castled king, rooks on open files and the bishop pair, and it knows that a lone minor piece can't win.
+- **Measured strength:** `npm run engine:match` plays the working copy against a committed version, taken from git (`--baseline <ref>`, default `HEAD`), from 12 openings with each colour. Against the Phase 11 engine at 150 ms a move, the new engine scored +20 =3 −1 (89.6%, about +370 Elo). `npm run engine:match -- --ladder` checks that each play level beats the one below.
+
+**Server-side analysis (optional, off by default).**
+- **Turning it on:** start the server with `ANALYSIS_QUEUE=1` (and optionally `ANALYSIS_MS`, the engine time per position, default 600).
+- **Using it:** signed-in players get **☁ Analyse on the server instead** on reviews of their own online games. The game waits in a queue and is analysed in a worker thread on the server, one game at a time. The review is saved with the game, so you can close the page; the board loads it when it's done.
+- **The live site:** it's off there, because free hosting has slow, shared CPUs.
+
 ## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
@@ -232,6 +261,7 @@ The app is one Node process that serves the built files, the account API and the
 - **[Dockerfile](Dockerfile):** builds the app and runs `node server/index.ts` on port 8787 (`PORT` overrides it). It works on any Docker host.
 - **[render.yaml](render.yaml):** a Render Blueprint for this Dockerfile, on the free plan, with the `/healthz` health check. Push the project to a GitHub repository, then in Render choose **New → Blueprint** and pick the repository. Render provides the HTTPS address.
 - **Database for a deployed site:** create a PostgreSQL database, for example a free one at [Neon](https://neon.tech). Copy its connection string (`postgresql://…?sslmode=require`) and give it to Render as `DATABASE_URL`. The Blueprint asks for it; later you can change it under the service's **Environment** settings. Without it, accounts are stored in the container and wiped on every restart or deploy.
+- **Server-side analysis** is off unless `ANALYSIS_QUEUE=1` is set (see Phase 12). Each queued game keeps one CPU core busy for about `ANALYSIS_MS` × its number of positions.
 - **Behind a proxy**, set `TRUST_PROXY=1` so limits see real client addresses and session cookies are marked `Secure` (render.yaml already sets it). `MAX_CONNS_PER_IP` (default 20) changes the socket limit.
 
 Things to know about hosting it:
@@ -263,10 +293,14 @@ src/
     divider.ts    opening / middlegame / endgame split
     performance.ts  the rough performance estimate
     retry.ts      retry-your-mistakes rules
+    engineSettings.ts  analysis board engine settings (time or depth, lines, threads, threat, arrows)
+    rootSplit.ts  sharing the first moves between engine workers, merging their lines; the threat position
+    shapes.ts     drawn arrows and circles, and their [%cal]/[%csl] PGN form
     reviewData.ts the saved review format, checked by the server; savedReview.ts converts to it
   engine/
     board.ts      fast 0x88 move generator for the search (checked by perft), two Zobrist hashes
-    search.ts     negamax with alpha-beta, transposition table, quiescence, killer moves,
+    search.ts     principal variation search with null-move pruning, late-move reductions,
+                  transposition table, quiescence, killer and history ordering; tapered
                   evaluation, play levels and multi-line analysis
     engine.worker.ts  runs a move search or an analysis in a Web Worker
   components/   Board (with arrows), Piece, PromotionPicker, ClockDisplay, MoveList, GameControls,
@@ -293,6 +327,8 @@ server/         the server (Node, run directly from TypeScript)
   rating/glicko2.ts  the Glicko-2 rating system
   puzzles.ts    puzzle catalogue for the server, solve checking, daily puzzle, theme weights
   puzzleDashboard.ts  dashboard statistics (strengths, improvement areas, chart, history)
+  analysisQueue.ts  optional server-side game analysis: the queue, and saving the result as a review
+  analysisWorker.ts the worker thread that runs the engine over a game
   tournament/   manager.ts (lifecycle, timers, live pages), arena.ts (scoring, pairing),
                 swiss.ts (pairing, byes, tie-breaks), matching.ts (minimum-cost matching)
   db/           one interface over SQLite (node:sqlite) and PostgreSQL (pg), plus migrations
@@ -304,6 +340,8 @@ scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swis
 scripts/smoke-puzzles.ts  end-to-end check of puzzle ratings, the dashboard and the daily puzzle
 scripts/smoke-account-settings.ts  end-to-end check of password change, leaderboard and account deletion
 scripts/smoke-review.ts  end-to-end check: two accounts play, one saves a review, accuracy shows in both histories
+scripts/smoke-server-analysis.ts  end-to-end check of the server analysis queue (server started with ANALYSIS_QUEUE=1)
+scripts/engine-match.ts  plays the engine against a committed version of itself, or each level against the next
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -368,7 +406,7 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Threefold and the 50-move rule end the game automatically.** There is no claim step as in over-the-board rules or on lila.
 - **The clock follows a simplified start rule.** White's first move starts Black's clock, and no increment is added for that first move.
 - **Pieces depend on system fonts.** They're Unicode glyphs, so they look slightly different between operating systems.
-- **The engine is modest.** It has no opening book or advanced pruning; level 8 is roughly club-player strength.
+- **The engine is still modest.** It's much stronger than before Phase 12 but far from top engines, and it has no opening book yet (that comes with the Opening Explorer, Phase 13).
 - **Review verdicts are only as good as a 0.6-second search** by that engine. Close calls, and deep sacrifices it doesn't see through, can be misjudged. Brilliant moves are found by static exchange, so a sacrifice that only pays off much later may be called best instead.
 - **No move is marked book yet.** That needs imported master games, which come with the Opening Explorer (Phase 13).
 - **Explanations are rule-based.** They name material, hanging pieces, mates, forks, pins and similar concrete reasons, and fall back to "makes your position worse" for quieter positional errors.
@@ -376,8 +414,10 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **The performance estimate is a rough guide,** from a fixed curve chosen for this app, not measured from rated players.
 - **The Play screen's PGN import keeps only the main line.** The Analysis board keeps everything.
 - **Secondary engine lines are shallower than the best line,** and their continuations can be short. Each extra line is searched separately with the remaining moves.
-- **Analysis stops after 15 seconds per position;** it isn't infinite.
-- **No server-side analysis, opening explorer or tablebases,** and no drawn arrows or highlights.
+- **Threads share the first moves, not memory.** Workers can't share a transposition table without cross-origin isolation headers, so more threads search each share deeper but don't combine their knowledge, and the reported depth is the shallowest worker's.
+- **The threat search starts fresh** from the position with the other side to move, so it doesn't see repetitions in the game so far.
+- **No opening explorer or tablebases yet** (Phase 13). Server-side analysis exists but is off unless the server is started with `ANALYSIS_QUEUE=1`, and its queue lives in memory: a restart drops games still waiting.
+- **Drawn shapes need a mouse.** Touch screens can't right-click, so there's no way to draw on a phone or tablet yet.
 - **The analysis tree is not saved.** It's lost on reload; export the PGN to keep it.
 - **The built-in puzzle set is small (65)** and leans towards mates and simple material wins. Ratings are estimates, not measured from players. Import a CSV for variety.
 - **Puzzle ratings and your stats are not linked.** There is no personal puzzle rating, and progress lives only in this browser.

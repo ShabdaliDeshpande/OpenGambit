@@ -1,5 +1,6 @@
 import { DEFAULT_POSITION, validateFen } from 'chess.js';
 import { createRoot, isWhiteMove, makeChild, moveNumber, type GameTree, type TreeNode } from './tree';
+import { joinComment, splitComment } from './shapes';
 
 /**
  * PGN reader and writer for game trees, including variations, comments and
@@ -11,12 +12,15 @@ import { createRoot, isWhiteMove, makeChild, moveNumber, type GameTree, type Tre
 const SEVEN_TAGS = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
 const escapeTag = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const cleanComment = (c: string) => c.replace(/[{}]/g, '').trim();
+/** The comment written after a node: its drawn shapes as [%cal]/[%csl] commands, then its text. */
+const commentOf = (node: TreeNode) => joinComment(cleanComment(node.comment), node.shapes);
+const hasComment = (node: TreeNode) => commentOf(node) !== '';
 
 function moveTokens(node: TreeNode, forceNumber: boolean): string[] {
   const n = moveNumber(node);
   const tokens = [isWhiteMove(node) ? `${n}. ${node.san}` : forceNumber ? `${n}... ${node.san}` : node.san];
   for (const nag of node.nags) tokens.push(`$${nag}`);
-  if (node.comment.trim()) tokens.push(`{ ${cleanComment(node.comment)} }`);
+  if (hasComment(node)) tokens.push(`{ ${commentOf(node)} }`);
   return tokens;
 }
 
@@ -28,9 +32,9 @@ function lineTokens(parent: TreeNode, forceNumber: boolean): string[] {
   while (node.children.length > 0) {
     const [main, ...alternatives] = node.children as [TreeNode, ...TreeNode[]];
     out.push(...moveTokens(main, force));
-    force = main.comment.trim() !== '';
+    force = hasComment(main);
     for (const alt of alternatives) {
-      out.push(`(${[...moveTokens(alt, true), ...lineTokens(alt, alt.comment.trim() !== '')].join(' ')})`);
+      out.push(`(${[...moveTokens(alt, true), ...lineTokens(alt, hasComment(alt))].join(' ')})`);
       force = true;
     }
     node = main;
@@ -62,7 +66,7 @@ export function writePgn(tree: GameTree): string {
   const tagLines = ordered.map(k => `[${k} "${escapeTag(headers[k]!)}"]`);
 
   const tokens: string[] = [];
-  if (root.comment.trim()) tokens.push(`{ ${cleanComment(root.comment)} }`);
+  if (hasComment(root)) tokens.push(`{ ${commentOf(root)} }`);
   tokens.push(...lineTokens(root, true), result);
   return `${tagLines.join('\n')}\n\n${wrap(tokens.join(' '), 80)}\n`;
 }
@@ -181,8 +185,11 @@ export function readPgn(text: string): GameTree {
   let sawMove = false;
 
   const current = () => line[line.length - 1]!;
-  const addComment = (b: Builder, text: string) => {
-    b.node = { ...b.node, comment: b.node.comment ? `${b.node.comment} ${text}` : text };
+  const addComment = (b: Builder, raw: string) => {
+    // drawn arrows and circles come out of the comment into the node's shapes
+    const { text, shapes } = splitComment(raw);
+    const comment = text ? (b.node.comment ? `${b.node.comment} ${text}` : text) : b.node.comment;
+    b.node = { ...b.node, comment, ...(shapes.length ? { shapes: [...(b.node.shapes ?? []), ...shapes] } : {}) };
   };
 
   for (; i < tokens.length; i++) {

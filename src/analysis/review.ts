@@ -6,10 +6,10 @@
 
 import { Chess } from 'chess.js';
 import type { Color } from 'chess.js';
-import type { AnalysisLine } from '../engine/search';
-import { moveAccuracy, povCp, winningChances, type Score } from './accuracy';
+import type { AnalysisLine } from '../engine/search.ts';
+import { moveAccuracy, povCp, winningChances, type Score } from './accuracy.ts';
 
-export { povCp, winningChances, type Score } from './accuracy';
+export { povCp, winningChances, type Score } from './accuracy.ts';
 
 export type Kind = 'brilliant' | 'great' | 'best' | 'excellent' | 'good' | 'book' | 'inaccuracy' | 'mistake' | 'miss' | 'blunder';
 

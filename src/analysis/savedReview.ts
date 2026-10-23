@@ -1,8 +1,8 @@
 // Turns a finished review into the saved form posted to the server, and back.
 
-import type { PositionEval, ReviewedMove } from './gameReview';
-import { decodeScore, decodeUci, encodeScore, encodeUci, KIND_CODE, REVIEW_VERSION, type StoredPosition, type StoredReview } from './reviewData';
-import type { UciLike } from './material';
+import type { PositionEval, ReviewedMove } from './gameReview.ts';
+import { decodeScore, decodeUci, encodeScore, encodeUci, KIND_CODE, REVIEW_VERSION, type StoredPosition, type StoredReview } from './reviewData.ts';
+import type { UciLike } from './material.ts';
 
 const encodePosition = (e: PositionEval): StoredPosition => ({
   s: encodeScore(e.score),

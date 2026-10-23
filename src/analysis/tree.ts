@@ -1,5 +1,6 @@
 import { Chess, DEFAULT_POSITION } from 'chess.js';
 import type { UciMove } from '../engine/search';
+import type { Shape } from './shapes';
 
 /**
  * Immutable move tree with variations. A node's id is its move in UCI form
@@ -17,6 +18,8 @@ export interface TreeNode {
   comment: string;
   /** Numeric Annotation Glyphs, e.g. 1 = "!", 2 = "?". */
   nags: number[];
+  /** Arrows and circles drawn on the board at this position. */
+  shapes?: Shape[];
   children: TreeNode[];
 }
 
@@ -158,6 +161,12 @@ export function lineEnd(root: TreeNode, path: Path): string[] {
 
 export const setComment = (root: TreeNode, path: Path, comment: string) =>
   updateAt(root, path, n => ({ ...n, comment }));
+
+export const setShapes = (root: TreeNode, path: Path, shapes: Shape[]) =>
+  updateAt(root, path, n => {
+    const { shapes: _old, ...rest } = n;
+    return shapes.length ? { ...rest, shapes } : rest;
+  });
 
 /** Move-quality glyphs ($1–$6) and position glyphs ($10–$19) are each mutually exclusive. */
 const NAG_GROUPS = [

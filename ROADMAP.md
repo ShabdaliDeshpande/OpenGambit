@@ -77,10 +77,10 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Signed-in players' reviews are saved with the game and shown in their profile's game history.
 - Builds on commit 569e324, which has the first version of the review.
 
-## Phase 12: Analysis settings and a stronger engine (planned)
+## Phase 12: Analysis settings and a stronger engine (done)
 - Settings: search by time or depth, infinite analysis, 1–5 lines, worker threads, threat mode, arrows on or off.
-- A stronger engine, still our own code, measured with an engine-vs-engine match script.
-- Optional server-side analysis queue (off by default).
+- A stronger engine, still our own code, measured with an engine-vs-engine match script: +20 =3 −1 against the Phase 11 engine (about +370 Elo).
+- Optional server-side analysis queue (off by default; `ANALYSIS_QUEUE=1` turns it on).
 - Right-click arrows and circles, kept in PGN as `[%cal]` and `[%csl]`.
 - **Decided:** the opening book moves to Phase 13, which imports the same games.
 

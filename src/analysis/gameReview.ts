@@ -3,11 +3,11 @@
 // split into opening / middlegame / endgame, and the key moments. Pure.
 
 import type { Color } from 'chess.js';
-import { averageCpl, gameAccuracy, whiteWinPercent } from './accuracy';
-import { divide, phaseOf, PHASES, type Division, type GamePhase } from './divider';
-import { materialOffered, type UciLike } from './material';
-import { estimatePerformance } from './performance';
-import { BAD_KINDS, classify, KINDS, type Judgement, type Kind, type Score } from './review';
+import { averageCpl, gameAccuracy, whiteWinPercent } from './accuracy.ts';
+import { divide, phaseOf, PHASES, type Division, type GamePhase } from './divider.ts';
+import { materialOffered, type UciLike } from './material.ts';
+import { estimatePerformance } from './performance.ts';
+import { BAD_KINDS, classify, KINDS, type Judgement, type Kind, type Score } from './review.ts';
 
 /** What the engine found in one position. */
 export interface PositionEval {

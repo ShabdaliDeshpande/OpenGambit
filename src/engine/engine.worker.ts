@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { analyse, chooseMove } from './search';
+import { analyse, chooseMove } from './search.ts';
 import type { EngineRequest, EngineResponse } from './protocol';
 
 interface WorkerScope {
@@ -23,6 +23,7 @@ scope.onmessage = e => {
         multiPv: req.multiPv,
         maxDepth: req.maxDepth,
         maxMs: req.maxMs,
+        ...(req.rootMoves ? { rootMoves: req.rootMoves } : {}),
         onInfo: i => scope.postMessage({ type: 'info', id: req.id, info: i }),
       });
       scope.postMessage({ type: 'done', id: req.id, info });

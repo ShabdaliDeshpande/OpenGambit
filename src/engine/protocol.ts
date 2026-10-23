@@ -1,4 +1,4 @@
-import type { AnalysisInfo, EngineMove, UciMove } from './search';
+import type { AnalysisInfo, EngineMove, UciMove } from './search.ts';
 
 /** Ask for a move to play (vs Computer). */
 export interface MoveRequest {
@@ -18,6 +18,8 @@ export interface AnalyseRequest {
   multiPv: number;
   maxDepth: number;
   maxMs: number;
+  /** Only search these first moves (this worker's share when several share the analysis). */
+  rootMoves?: UciMove[];
 }
 
 export type EngineRequest = MoveRequest | AnalyseRequest;

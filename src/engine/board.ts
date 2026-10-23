@@ -357,6 +357,43 @@ export class Board {
     this.hash2 = u.hash2;
   }
 
+  /**
+   * Passes the move to the other side (a "null move", used by the search to
+   * ask what the opponent would do if allowed two moves in a row). Undo with
+   * `unmakeNull`. Repetitions aren't looked for across it.
+   */
+  makeNull(): void {
+    this.stack.push({ move: 0, captured: 0, castling: this.castling, ep: this.ep, halfmove: this.halfmove, hash: this.hash, hash2: this.hash2 });
+    this.history.push(this.hash);
+    this.toggleState();
+    this.ep = -1;
+    this.toggleState();
+    this.halfmove = 0;
+    this.side = -this.side;
+    this.hash ^= K1.side;
+    this.hash2 ^= K2.side;
+  }
+
+  unmakeNull(): void {
+    const u = this.stack.pop();
+    if (!u) return;
+    this.history.pop();
+    this.side = -this.side;
+    this.ep = u.ep;
+    this.halfmove = u.halfmove;
+    this.hash = u.hash;
+    this.hash2 = u.hash2;
+  }
+
+  /** Whether `side` (1 or -1) has a piece other than pawns and the king. */
+  hasPieces(side: number): boolean {
+    for (let s = 0; s < 128; s++) {
+      const p = this.sq[s]! * side;
+      if (p > PAWN && p < KING) return true;
+    }
+    return false;
+  }
+
   /** True if the current position already occurred since the last irreversible move. */
   isRepetition(): boolean {
     const h = this.history;

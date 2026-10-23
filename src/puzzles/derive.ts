@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import type { Color, Square } from 'chess.js';
-import { analyse, type AnalysisLine, type UciMove } from '../engine/search';
+import { analyse, type AnalysisLine, type UciMove } from '../engine/search.ts';
 
 /**
  * Engine-based puzzle tooling: derives a solution for a position and checks

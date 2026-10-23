@@ -18,6 +18,7 @@ import { buildDashboard } from './puzzleDashboard.ts';
 import { PuzzleCatalogue, solves, themeWeight } from './puzzles.ts';
 import type { UciMove } from '../src/puzzles/types.ts';
 import { checkReview, reviewStats } from '../src/analysis/reviewData.ts';
+import type { AnalysisQueue } from './analysisQueue.ts';
 import type { Account } from './types.ts';
 
 export interface ApiOptions {
@@ -33,6 +34,8 @@ export interface ApiOptions {
   maxPuzzleAttempts?: number;
   /** Saved reviews allowed per player per 10 minutes. */
   maxReviewWrites?: number;
+  /** Server-side game analysis, when it's turned on (ANALYSIS_QUEUE=1). */
+  analysis?: AnalysisQueue | null;
 }
 
 const MAX_BODY = 4096;
@@ -282,6 +285,22 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         return send(res, 200, { saved, accuracy: { white: accuracy.w, black: accuracy.b } });
       }
 
+      const analysisPost = /^\/api\/games\/([^/]+)\/analysis$/.exec(path);
+      if (analysisPost) {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in to have your games analysed.');
+        if (!options.analysis) throw new HttpError(503, 'Server analysis is turned off on this server.');
+        const id = analysisPost[1]!;
+        const game = GAME_ID.test(id) ? await store.game(id) : undefined;
+        if (!game) throw new HttpError(404, 'No such game.');
+        if (game.whiteId !== user.id && game.blackId !== user.id) throw new HttpError(403, 'Only the players can ask for an analysis of this game.');
+        if (reviewWrites.blocked(user.id)) throw new HttpError(429, 'That’s a lot of reviews. Try again in a few minutes.');
+        reviewWrites.fail(user.id);
+        const placed = options.analysis.enqueue(game, user.id);
+        if (!placed) throw new HttpError(503, 'The analysis queue is full. Try again later, or review the game in your browser.');
+        return send(res, 200, placed);
+      }
+
       if (path === '/api/logout') {
         const token = readCookie(req.headers.cookie, SESSION_COOKIE);
         if (token) await store.deleteSession(token);
@@ -348,6 +367,15 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       const stored = GAME_ID.test(id) ? await store.tournament(id) : undefined;
       if (!stored) throw new HttpError(404, 'No such tournament.');
       return send(res, 200, { tournament: stored });
+    }
+
+    const analysisGet = /^\/api\/games\/([^/]+)\/analysis$/.exec(path);
+    if (analysisGet) {
+      if (!options.analysis) return send(res, 200, { enabled: false, status: 'none' });
+      const id = analysisGet[1]!;
+      const now = options.analysis.status(id);
+      const saved = now.status === 'none' && GAME_ID.test(id) ? await store.review(id) : undefined;
+      return send(res, 200, { enabled: true, ...(saved ? { status: 'done' } : now) });
     }
 
     const reviewGet = /^\/api\/games\/([^/]+)\/review$/.exec(path);

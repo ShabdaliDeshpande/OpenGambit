@@ -94,6 +94,12 @@ export const fetchGames = async (name: string, before: number) =>
   (await call<{ games: PublicGame[] }>(`/api/users/${encodeURIComponent(name)}/games?before=${before}`)).games;
 export const fetchGame = async (id: string) => (await call<{ game: PublicGame }>(`/api/games/${encodeURIComponent(id)}`)).game;
 export const fetchReview = async (id: string) => (await call<{ review: StoredReview | null }>(`/api/games/${encodeURIComponent(id)}/review`)).review;
+export type ServerAnalysis =
+  | { enabled: boolean; status: 'none' | 'done' | 'failed' }
+  | { enabled: true; status: 'queued'; position: number }
+  | { enabled: true; status: 'running'; done: number; total: number };
+export const fetchServerAnalysis = (id: string) => call<ServerAnalysis>(`/api/games/${encodeURIComponent(id)}/analysis`);
+export const requestServerAnalysis = async (id: string) => ({ enabled: true, ...(await call<object>(`/api/games/${encodeURIComponent(id)}/analysis`, {})) }) as ServerAnalysis;
 export const saveReview = (id: string, review: StoredReview) =>
   call<{ saved: boolean; accuracy: { white: number | null; black: number | null } }>(`/api/games/${encodeURIComponent(id)}/review`, { review });
 

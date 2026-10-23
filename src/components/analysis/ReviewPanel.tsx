@@ -31,6 +31,9 @@ interface Props {
   retry: RetryState | null;
   /** About saving the review with the game ("Saved with the game."), or null. */
   savedNote: string | null;
+  /** Server-side analysis, when the server offers it. */
+  server?: { text: string | null; canRequest: boolean } | null;
+  onServer?: () => void;
   onStart: () => void;
   onStop: () => void;
   onJump: (color: Color, dir: 1 | -1) => void;
@@ -91,7 +94,7 @@ function RetryBox({ retry, names, onRetryAction }: Pick<Props, 'names' | 'onRetr
 
 /** "Review game": runs the engine over the game and judges every move, from brilliant to blunder. */
 export function ReviewPanel(props: Props) {
-  const { moves, progress, summary, phaseNotes, reviewed, names, current, graph, retryCounts, retry, savedNote } = props;
+  const { moves, progress, summary, phaseNotes, reviewed, names, current, graph, retryCounts, retry, savedNote, server } = props;
   const { onStart, onStop, onJump, onShowBest, onGoto, onRetry, onRetryAction } = props;
 
   if (retry)
@@ -125,6 +128,16 @@ export function ReviewPanel(props: Props) {
         )
       )}
       {moves < 2 && !summary && <p className="muted small">Load or play a game first: the review judges every move of the main line.</p>}
+      {server?.canRequest && (
+        <button type="button" onClick={props.onServer} title="The server analyses the game and saves the review with it, so you can close this page">
+          ☁ Analyse on the server instead
+        </button>
+      )}
+      {server?.text && (
+        <p className="muted small" role="status">
+          {server.text}
+        </p>
+      )}
 
       {graph && <EvalGraph points={graph.points} kinds={graph.kinds} division={graph.division} current={graph.ply} onSelect={onGoto} />}
 

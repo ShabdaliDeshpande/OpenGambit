@@ -1,4 +1,5 @@
 import type { UciMove } from '../engine/search';
+import type { Shape } from './shapes';
 import {
   addMove,
   deleteAt,
@@ -8,6 +9,7 @@ import {
   nodeAt,
   promoteVariation,
   setComment,
+  setShapes,
   toggleNag,
   type GameTree,
 } from './tree';
@@ -30,7 +32,8 @@ export type AnalysisAction =
   | { type: 'promote' }
   | { type: 'mainline' }
   | { type: 'comment'; text: string }
-  | { type: 'nag'; nag: number };
+  | { type: 'nag'; nag: number }
+  | { type: 'shapes'; shapes: Shape[] };
 
 export const initialAnalysis = (): AnalysisState => ({ tree: emptyTree(), path: [] });
 
@@ -75,5 +78,7 @@ export function analysisReducer(s: AnalysisState, a: AnalysisAction): AnalysisSt
       return withRoot(s, setComment(root, s.path, a.text));
     case 'nag':
       return s.path.length ? withRoot(s, toggleNag(root, s.path, a.nag)) : s;
+    case 'shapes':
+      return withRoot(s, setShapes(root, s.path, a.shapes));
   }
 }

@@ -43,7 +43,7 @@ const RAW: [string, string, number, string][] = [
   ["6k1/rpp4n/p2p1p1p/P2PpP1P/1BN1P3/P1P2B2/1Rb2b2/1K4N1 w - - 9 36", "b2c2", 1200, "advantage"], // self-play
   ["r2r2k1/5pb1/1p5Q/p2P4/2P2PnP/P7/1P6/3R2RK w - - 2 38", "g1g4", 1200, "advantage"], // self-play
   ["2rq1k2/2pbp1r1/2n2np1/1B1p1pN1/RP1P1P1P/1Q2P1P1/2N5/3K3R w - - 3 26", "b5c6", 1200, "advantage"], // self-play
-  ["2q4r/k2n2QP/8/4np2/1P5R/4p1P1/PB2p3/1R2K3 w - - 4 40", "b2e5", 1200, "advantage"], // self-play
+  ["r3k3/pp3ppp/8/3N4/8/8/PPP2PPP/4K3 w - - 0 1", "d5c7 e8d7 c7a8", 1200, "advantage fork"], // composed (replaced a self-play puzzle with two winning moves)
   ["k5r1/1p1r4/8/2p1P1pp/pqP2p2/1Pb2P2/3N4/1R1K2QR b - - 3 45", "d7d2", 1200, "advantage"], // self-play
   ["3kb2r/p3b1R1/1pn4p/3p4/3P1QBq/5N2/PPP2P2/R1BK4 w - - 0 32", "f3h4", 1200, "advantage"], // self-play
   ["8/2r1k3/4p3/NQ1p4/1P1qp2p/4R2P/2P3P1/4K1R1 b - - 1 50", "d4e3", 1200, "advantage fork"], // self-play

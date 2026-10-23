@@ -15,6 +15,8 @@ function runtimeFiles(): string[] {
     // static and dynamic imports of project files (type-only imports are erased and don't load)
     for (const m of src.matchAll(/(?:^|\n)\s*(import(?!\s+type\b)[^'"]*?from\s*|import\s*\(\s*|export\s+[^'"]*?from\s*)['"](\.{1,2}\/[^'"]+)['"]/g))
       visit(resolve(dirname(file), m[2]!));
+    // worker threads load their own file
+    for (const m of src.matchAll(/new URL\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*,\s*import\.meta\.url\s*\)/g)) visit(resolve(dirname(file), m[1]!));
   };
   visit(join(ROOT, 'server', 'index.ts'));
   return [...seen].map(f => relative(ROOT, f).replace(/\\/g, '/'));

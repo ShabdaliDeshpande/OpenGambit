@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "puzzles:import": "node scripts/import-puzzles.ts",
+    "engine:match": "node --experimental-transform-types scripts/engine-match.ts",
     "start": "node server/index.ts"
   },
   "dependencies": {
