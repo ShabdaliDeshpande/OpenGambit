@@ -84,12 +84,12 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - Right-click arrows and circles, kept in PGN as `[%cal]` and `[%csl]`.
 - **Decided:** the opening book moves to Phase 13, which imports the same games.
 
-## Phase 13: Opening Explorer (planned)
+## Phase 13: Opening Explorer (done)
 - For each move: games, white/draw/black %, average rating.
 - Tabs: Masters (imported), OpenGambit games, and My games (filters by colour, speed and date).
 - Opening name and ECO code; book moves in the review; an opening book for the engine.
 - Importers the user runs on files they download: `npm run explorer:import -- path/to/games.pgn` and `npm run openings:import -- path/to/openings.tsv`.
-- Stretch goal: endgame tablebases from Syzygy files the user supplies. **Decided:** the rest of the phase comes first, and I'll ask before cutting it.
+- Endgame tablebases (Syzygy files the user supplies) were a stretch goal. **Decided:** left out for now and listed under Known gaps, because a reader for the file format is as much work as the rest of the phase.
 
 ## Phase 14: Insights (planned)
 - Rating history; results by colour, opening, time control, time of day and opponent rating.

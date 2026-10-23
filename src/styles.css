@@ -2051,3 +2051,101 @@ button.daily-button {
   flex-wrap: wrap;
   margin-top: 8px;
 }
+
+/* ---------- opening explorer ---------- */
+
+.opening-name {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.opening-name strong {
+  margin-right: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.explorer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.explorer-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.explorer-tabs button {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.explorer-tabs button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.explorer-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 6px;
+}
+
+.explorer-filter input[type='month'] {
+  width: auto;
+  padding: 2px 4px;
+}
+
+.explorer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.explorer-table th,
+.explorer-table td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.explorer-table td:nth-child(3) {
+  width: 45%;
+}
+
+.result-bar {
+  display: flex;
+  height: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.result-bar span {
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.result-bar .white {
+  background: #f4f4f1;
+  color: #222;
+}
+
+.result-bar .draws {
+  background: #a3a8ae;
+  color: #111;
+}
+
+.result-bar .black {
+  background: #33383f;
+  color: #eee;
+}

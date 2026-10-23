@@ -250,6 +250,40 @@ On the analysis board, **⚙** next to the engine switch opens the engine settin
 - **Using it:** signed-in players get **☁ Analyse on the server instead** on reviews of their own online games. The game waits in a queue and is analysed in a worker thread on the server, one game at a time. The review is saved with the game, so you can close the page; the board loads it when it's done.
 - **The live site:** it's off there, because free hosting has slow, shared CPUs.
 
+## Features (Phase 13: Opening Explorer)
+
+The **Opening explorer** panel on the analysis board shows what was played from the position on the board. Click a move to play it. **Hide** folds the panel away, and the panel remembers your choices.
+
+| Tab | What it counts |
+|---|---|
+| Masters | Master games you imported (see below). Shows games, White/draw/Black %, and the players' average rating. |
+| OpenGambit | Every game finished on this server, as it ends. |
+| My games | Your own games, as White or as Black, filtered by speed and by month range. Needs an account. |
+
+**Also new:**
+- **Opening names:** the name of the opening reached (for example **C60** Spanish opening) shows above the engine lines, once opening names are imported. Past the last named position, the name of the nearest earlier one stays.
+- **Book moves in the review:** a move is **≡ Book** when it's a master move played in more than one imported game. Retry mistakes skips book moves. This works for reviews in the browser and on the server.
+- **Opening book for the computer:** from level 3 up, the computer plays master moves for the first 16 plies (8 moves each). It picks them in proportion to how often masters played them, each needing at least two games. If the server has no master games, or you're offline, it plays its own moves as before.
+
+The explorer covers games from the standard starting position only.
+
+### Importing master games and opening names
+
+Nothing is bundled: you download the files yourself and import them into the server's database, which is SQLite, or PostgreSQL when `DATABASE_URL` is set. Stop the server first when using SQLite.
+
+```
+npm run explorer:import -- games.pgn [more.pgn …] [--min-rating 2200] [--plies 30]
+npm run openings:import -- openings.tsv [more.tsv …]
+npm run explorer:index-site
+```
+
+- **`explorer:import`** reads PGN files (or `.pgn.zst` on a Node version with zstd support) one game at a time, however large. It keeps the first 30 moves (plies) of each game from the standard start.
+  - With `--min-rating`, both players need at least that rating.
+  - Games set up from another position, other variants and games without a result are skipped.
+  - Importing the same file twice counts its games twice.
+- **`openings:import`** reads TSV files with a header row naming `eco`, `name` and `pgn` columns, for example `C60⇥Spanish opening⇥1. e4 e5 2. Nf3 Nc6 3. Bb5`. Public-domain opening-name lists in this format exist. When two names reach the same position, the first one read is kept.
+- **`explorer:index-site`** rebuilds the OpenGambit and My games data from games saved before the explorer existed. New games are added as they finish, so you need it only once.
+
 ## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
@@ -261,6 +295,7 @@ The app is one Node process that serves the built files, the account API and the
 - **[Dockerfile](Dockerfile):** builds the app and runs `node server/index.ts` on port 8787 (`PORT` overrides it). It works on any Docker host.
 - **[render.yaml](render.yaml):** a Render Blueprint for this Dockerfile, on the free plan, with the `/healthz` health check. Push the project to a GitHub repository, then in Render choose **New → Blueprint** and pick the repository. Render provides the HTTPS address.
 - **Database for a deployed site:** create a PostgreSQL database, for example a free one at [Neon](https://neon.tech). Copy its connection string (`postgresql://…?sslmode=require`) and give it to Render as `DATABASE_URL`. The Blueprint asks for it; later you can change it under the service's **Environment** settings. Without it, accounts are stored in the container and wiped on every restart or deploy.
+- **Opening explorer data:** run the importers (Phase 13) with the same `DATABASE_URL` as the deployed site, from your own computer, to fill a PostgreSQL database.
 - **Server-side analysis** is off unless `ANALYSIS_QUEUE=1` is set (see Phase 12). Each queued game keeps one CPU core busy for about `ANALYSIS_MS` × its number of positions.
 - **Behind a proxy**, set `TRUST_PROXY=1` so limits see real client addresses and session cookies are marked `Secure` (render.yaml already sets it). `MAX_CONNS_PER_IP` (default 20) changes the socket limit.
 
@@ -305,9 +340,11 @@ src/
     engine.worker.ts  runs a move search or an analysis in a Web Worker
   components/   Board (with arrows), Piece, PromotionPicker, ClockDisplay, MoveList, GameControls,
                 SetupPanel, PgnFenPanel, PlayView
-    analysis/     AnalysisView, EvalBar, EngineLines, TreeView, NodeTools, ReviewPanel, EvalGraph
+    analysis/     AnalysisView, EvalBar, EngineLines, TreeView, NodeTools, ReviewPanel, EvalGraph, ExplorerPanel
   hooks/        useEngine, useAnalysis, useKeyboardNav, useTheme, useOnline, useAccount, useGameSounds
   sound/sounds.ts  synthesised game sounds (Web Audio) and the on/off setting
+  explorer/     key.ts (position keys shared with the server), book.ts (the computer's opening book),
+                format.ts (result percentages), fetchBookMove.ts
   online/       client side of online play
     protocol.ts   message types shared with the server
     client.ts     the WebSocket client (reconnects and re-subscribes by itself)
@@ -329,6 +366,8 @@ server/         the server (Node, run directly from TypeScript)
   puzzleDashboard.ts  dashboard statistics (strengths, improvement areas, chart, history)
   analysisQueue.ts  optional server-side game analysis: the queue, and saving the result as a review
   analysisWorker.ts the worker thread that runs the engine over a game
+  explorer/     explorerStore.ts (move counts, My games, opening names, book moves), importer.ts,
+                pgnGames.ts (reads large PGN files and replays SAN quickly on the engine board)
   tournament/   manager.ts (lifecycle, timers, live pages), arena.ts (scoring, pairing),
                 swiss.ts (pairing, byes, tie-breaks), matching.ts (minimum-cost matching)
   db/           one interface over SQLite (node:sqlite) and PostgreSQL (pg), plus migrations
@@ -342,6 +381,8 @@ scripts/smoke-account-settings.ts  end-to-end check of password change, leaderbo
 scripts/smoke-review.ts  end-to-end check: two accounts play, one saves a review, accuracy shows in both histories
 scripts/smoke-server-analysis.ts  end-to-end check of the server analysis queue (server started with ANALYSIS_QUEUE=1)
 scripts/engine-match.ts  plays the engine against a committed version of itself, or each level against the next
+scripts/import-explorer.ts, import-openings.ts, index-site-explorer.ts  the explorer's importers (npm run explorer:import, openings:import, explorer:index-site)
+scripts/smoke-explorer.ts  end-to-end check of the explorer tabs, opening names and book moves
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -406,9 +447,9 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Threefold and the 50-move rule end the game automatically.** There is no claim step as in over-the-board rules or on lila.
 - **The clock follows a simplified start rule.** White's first move starts Black's clock, and no increment is added for that first move.
 - **Pieces depend on system fonts.** They're Unicode glyphs, so they look slightly different between operating systems.
-- **The engine is still modest.** It's much stronger than before Phase 12 but far from top engines, and it has no opening book yet (that comes with the Opening Explorer, Phase 13).
+- **The engine is still modest.** It's much stronger than before Phase 12 but far from top engines. Its opening book needs imported master games.
 - **Review verdicts are only as good as a 0.6-second search** by that engine. Close calls, and deep sacrifices it doesn't see through, can be misjudged. Brilliant moves are found by static exchange, so a sacrifice that only pays off much later may be called best instead.
-- **No move is marked book yet.** That needs imported master games, which come with the Opening Explorer (Phase 13).
+- **Book moves need imported master games.** Without any (see Phase 13), no move is marked book and the computer has no opening book.
 - **Explanations are rule-based.** They name material, hanging pieces, mates, forks, pins and similar concrete reasons, and fall back to "makes your position worse" for quieter positional errors.
 - **Only signed-in players' own online games keep their review.** Reviews of games against the computer, imported PGNs or a guest's games stay on the board until you leave it.
 - **The performance estimate is a rough guide,** from a fixed curve chosen for this app, not measured from rated players.
@@ -416,7 +457,7 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Secondary engine lines are shallower than the best line,** and their continuations can be short. Each extra line is searched separately with the remaining moves.
 - **Threads share the first moves, not memory.** Workers can't share a transposition table without cross-origin isolation headers, so more threads search each share deeper but don't combine their knowledge, and the reported depth is the shallowest worker's.
 - **The threat search starts fresh** from the position with the other side to move, so it doesn't see repetitions in the game so far.
-- **No opening explorer or tablebases yet** (Phase 13). Server-side analysis exists but is off unless the server is started with `ANALYSIS_QUEUE=1`, and its queue lives in memory: a restart drops games still waiting.
+- **No endgame tablebases.** Server-side analysis exists but is off unless the server is started with `ANALYSIS_QUEUE=1`, and its queue lives in memory: a restart drops games still waiting.
 - **Drawn shapes need a mouse.** Touch screens can't right-click, so there's no way to draw on a phone or tablet yet.
 - **The analysis tree is not saved.** It's lost on reload; export the PGN to keep it.
 - **The built-in puzzle set is small (65)** and leans towards mates and simple material wins. Ratings are estimates, not measured from players. Import a CSV for variety.

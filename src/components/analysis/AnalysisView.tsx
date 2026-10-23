@@ -6,12 +6,14 @@ import { phaseSummary, reviewMoves, summarizeReview, type GameMove } from '../..
 import { explainMove } from '../../analysis/explain';
 import { afterMove } from '../../analysis/material';
 import { judgeTry, quickVerdict, retryCandidates, retryReducer, startRetry, type RetryAction, type RetryState } from '../../analysis/retry';
-import { encodeUci } from '../../analysis/reviewData';
+import { decodeUci, encodeUci } from '../../analysis/reviewData';
 import { fromStoredReview, toStoredReview } from '../../analysis/savedReview';
 import { formatEval } from '../../analysis/evalFormat';
 import { mainlinePositions, REVIEW_ENGINE, REVIEW_MS, useGameReview, type PositionEval } from '../../hooks/useGameReview';
 import { evaluateOnce } from '../../hooks/evaluateOnce';
-import { fetchReview, fetchServerAnalysis, requestServerAnalysis, saveReview, ApiError, type ServerAnalysis } from '../../account/api';
+import { fetchBook, fetchOpening, fetchReview, fetchServerAnalysis, requestServerAnalysis, saveReview, ApiError, type ServerAnalysis } from '../../account/api';
+import { isStandardStart } from '../../explorer/key';
+import { ExplorerPanel } from './ExplorerPanel';
 import { availableThreads, checkSettings, searchLimits, type EngineSettings } from '../../analysis/engineSettings';
 import { threatFen } from '../../analysis/rootSplit';
 import type { Shape } from '../../analysis/shapes';
@@ -70,6 +72,8 @@ interface Props {
   onFlip: () => void;
   /** A PGN to load, sent from another screen; `nonce` changes on every request. */
   request: AnalysisRequest | null;
+  /** Someone is signed in (the explorer's "My games" needs an account). */
+  signedIn?: boolean;
 }
 
 /** What the review panel says about server analysis (null when the server doesn't offer it). */
@@ -92,7 +96,7 @@ const turnOf = (fen: string): Color => (fen.split(' ')[1] === 'b' ? 'b' : 'w');
 const showScore = (s: Score) =>
   'mated' in s ? (s.mated === 'w' ? '0–1' : '1–0') : formatEval('mate' in s ? { cp: null, mate: s.mate } : { cp: s.cp, mate: null });
 
-export function AnalysisView({ active, orientation, onFlip, request }: Props) {
+export function AnalysisView({ active, orientation, onFlip, request, signedIn = false }: Props) {
   const [state, dispatch] = useReducer(analysisReducer, undefined, initialAnalysis);
   const maxThreads = useMemo(() => availableThreads(), []);
   // older versions stored only { on, lines }; checkSettings fills in the rest
@@ -203,7 +207,28 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
     [positions],
   );
   const evals = useMemo(() => positions.map(p => review.evalAt(p)), [positions, review.evalAt]);
-  const reviewed = useMemo(() => reviewMoves(gameMoves, evals), [gameMoves, evals]);
+  // book moves: master moves played in more than one game (needs imported games on the server)
+  const standard = isStandardStart(root.fen);
+  const mainUcis = useMemo(() => gameMoves.map(m => encodeUci(m.uci)).join(','), [gameMoves]);
+  const [book, setBook] = useState<{ moves: string; set: ReadonlySet<string> } | null>(null);
+  useEffect(() => {
+    if (!standard || !mainUcis) return setBook({ moves: mainUcis, set: new Set() });
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchBook(mainUcis.split(','))
+        .then(flags => !cancelled && setBook({ moves: mainUcis, set: new Set(gameMoves.filter((_m, i) => flags[i]).map(m => `${m.fenBefore}|${encodeUci(m.uci)}`)) }))
+        .catch(() => !cancelled && setBook({ moves: mainUcis, set: new Set() }));
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [mainUcis, standard]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bookReady = book?.moves === mainUcis;
+  const reviewed = useMemo(
+    () => reviewMoves(gameMoves, evals, { isBook: (fen, m) => !!book?.set.has(`${fen}|${encodeUci(m)}`) }),
+    [gameMoves, evals, book],
+  );
   const headers = state.tree.headers;
   const summary = useMemo(() => {
     if (reviewed.length === 0) return null;
@@ -216,7 +241,7 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
 
   // a finished review of the viewer's own game is saved with it
   useEffect(() => {
-    if (!game?.canSave || !summary?.complete || review.progress) return;
+    if (!game?.canSave || !summary?.complete || review.progress || !bookReady) return;
     if (gameMoves.map(m => encodeUci(m.uci)).join(' ') !== game.moves.join(' ')) return;
     const key = `${game.id}|${gameMoves.length}`;
     if (savedKey.current === key) return;
@@ -228,7 +253,7 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
         if (e instanceof ApiError && [401, 403, 404].includes(e.status)) return;
         setSavedNote(`Couldn’t save the review: ${e instanceof Error ? e.message : String(e)}`);
       });
-  }, [game, summary, review.progress, gameMoves, evals, reviewed]);
+  }, [game, summary, review.progress, gameMoves, evals, reviewed, bookReady]);
 
   // retry mistakes: the board goes to the position before each error
   const retryJob = useRef<{ cancel: () => void } | null>(null);
@@ -270,6 +295,23 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
     () => ({ startFen: root.fen, moves: movesAlong(root, state.path), fen: node.fen, key: `${root.fen}|${state.path.join(' ')}` }),
     [root, state.path, node.fen],
   );
+  // the name of the opening reached (from the imported list), for the position on the board
+  const pathUcis = useMemo(() => movesAlong(root, state.path).map(encodeUci).join(','), [root, state.path]);
+  const [opening, setOpening] = useState<{ eco: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!standard || !pathUcis) return setOpening(null);
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchOpening(pathUcis.split(','))
+        .then(o => !cancelled && setOpening(o))
+        .catch(() => !cancelled && setOpening(null));
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [pathUcis, standard]);
+
   // the engine keeps quiet while you retry, so it doesn't give the answer away
   const showEngine = settings.on && !retry;
   const limits = searchLimits(settings);
@@ -377,6 +419,11 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
       </div>
 
       <aside className="side">
+        {opening && (
+          <p className="opening-name" title="Opening name from the imported list">
+            <strong>{opening.eco}</strong> {opening.name}
+          </p>
+        )}
         <EngineLines
           fen={node.fen}
           settings={settings}
@@ -387,6 +434,18 @@ export function AnalysisView({ active, orientation, onFlip, request }: Props) {
           paused={!!retry}
           onPlayLine={pv => dispatch({ type: 'play', moves: pv })}
         />
+
+        {!retry && (
+          <ExplorerPanel
+            fen={node.fen}
+            standard={standard}
+            signedIn={signedIn}
+            onPlay={uci => {
+              const m = decodeUci(uci);
+              if (m) dispatch({ type: 'play', moves: [m as UciMove] });
+            }}
+          />
+        )}
 
         <ReviewPanel
           moves={positions.length - 1}

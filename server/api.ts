@@ -19,6 +19,8 @@ import { PuzzleCatalogue, solves, themeWeight } from './puzzles.ts';
 import type { UciMove } from '../src/puzzles/types.ts';
 import { checkReview, reviewStats } from '../src/analysis/reviewData.ts';
 import type { AnalysisQueue } from './analysisQueue.ts';
+import { Explorer } from './explorer/explorerStore.ts';
+import { validateFen } from 'chess.js';
 import type { Account } from './types.ts';
 
 export interface ApiOptions {
@@ -134,6 +136,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   const puzzles = options.puzzles ?? PuzzleCatalogue.load();
   const puzzleAttempts = new LoginLimiter(options.maxPuzzleAttempts ?? 120, 10 * 60_000, now);
   const reviewWrites = new LoginLimiter(options.maxReviewWrites ?? 30, 10 * 60_000, now);
+  const explorer = new Explorer(store.db);
 
   const puzzleRatingOf = async (userId: string) => {
     const g = currentGlicko(await store.puzzleRating(userId), now());
@@ -367,6 +370,37 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       const stored = GAME_ID.test(id) ? await store.tournament(id) : undefined;
       if (!stored) throw new HttpError(404, 'No such tournament.');
       return send(res, 200, { tournament: stored });
+    }
+
+    if (path === '/api/explorer') {
+      const fen = url.searchParams.get('fen') ?? '';
+      if (fen.length > 100 || !validateFen(fen).ok) throw new HttpError(400, 'Give a valid FEN.');
+      const source = url.searchParams.get('source');
+      if (source === 'mine') {
+        const user = await currentUser(req);
+        if (!user) throw new HttpError(401, 'Sign in to see your own games.');
+        const month = (v: string | null) => (v && /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : undefined);
+        const speeds = (url.searchParams.get('speeds') ?? '').split(',').filter(s => (CATEGORIES as readonly string[]).includes(s));
+        const since = month(url.searchParams.get('since'));
+        const until = month(url.searchParams.get('until'));
+        const moves = await explorer.mine(user.id, fen, {
+          color: url.searchParams.get('color') === 'b' ? 'b' : 'w',
+          ...(speeds.length ? { speeds } : {}),
+          ...(since ? { since } : {}),
+          ...(until ? { until } : {}),
+        });
+        return send(res, 200, { source, available: true, moves });
+      }
+      if (source !== 'masters' && source !== 'site') throw new HttpError(400, 'Unknown explorer source.');
+      const moves = await explorer.moves(source, fen);
+      return send(res, 200, { source, available: moves.length > 0 || (await explorer.has(source)), moves });
+    }
+
+    if (path === '/api/opening' || path === '/api/explorer/book') {
+      const list = (url.searchParams.get('moves') ?? '').split(',').filter(Boolean);
+      if (list.length > 300 || list.some(m => !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m))) throw new HttpError(400, 'Give the moves in UCI, separated by commas.');
+      if (path === '/api/opening') return send(res, 200, { opening: await explorer.opening(list.slice(0, 60)) });
+      return send(res, 200, { book: await explorer.bookFlags(list) });
     }
 
     const analysisGet = /^\/api\/games\/([^/]+)\/analysis$/.exec(path);

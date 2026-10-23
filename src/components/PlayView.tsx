@@ -23,6 +23,12 @@ import {
 import { describeResult } from '../chess/gameEnd';
 import { acceptsDraw } from '../engine/search';
 import { useEngine } from '../hooks/useEngine';
+import { bookApplies } from '../explorer/book';
+import { fetchBookMove } from '../explorer/fetchBookMove';
+import { isStandardStart } from '../explorer/key';
+
+/** A book move still waits a moment, so the computer never answers instantly. */
+const BOOK_REPLY_MS = 400;
 import { useKeyboardNav } from '../hooks/useKeyboardNav';
 import { useGameEndSound, useLowTimeWarning } from '../hooks/useGameSounds';
 import { resolvePremove, type Premove } from '../chess/premove';
@@ -70,12 +76,18 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
   useEffect(() => {
     if (!engineColor || game.result || turn !== engineColor) return;
     let cancelled = false;
-    engine
-      .requestMove({
-        startFen: game.startFen,
-        moves: game.moves.map(m => ({ from: m.from, to: m.to, ...(m.promotion ? { promotion: m.promotion } : {}) })),
-        level: setup.level,
-      })
+    // early on, the computer plays master moves from the server's opening book when it has one
+    const fromBook = bookApplies(setup.level, game.moves.length, isStandardStart(game.startFen)) ? fetchBookMove(live) : Promise.resolve(null);
+    fromBook
+      .then(book =>
+        book
+          ? new Promise<typeof book>(resolve => setTimeout(() => resolve(book), BOOK_REPLY_MS))
+          : engine.requestMove({
+              startFen: game.startFen,
+              moves: game.moves.map(m => ({ from: m.from, to: m.to, ...(m.promotion ? { promotion: m.promotion } : {}) })),
+              level: setup.level,
+            }),
+      )
       .then(m => {
         if (cancelled || !m) return;
         dispatch({ type: 'move', from: m.from, to: m.to, ...(m.promotion ? { promotion: m.promotion } : {}), now: performance.now() });

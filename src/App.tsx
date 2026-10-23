@@ -162,6 +162,7 @@ export default function App() {
           orientation={analysisOrientation}
           onFlip={() => setAnalysisOrientation(o => opposite(o))}
           request={analysisRequest}
+          signedIn={!!me}
         />
       </div>
       {tab === 'profile' && profileName && (

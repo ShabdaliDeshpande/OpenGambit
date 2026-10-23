@@ -3,6 +3,7 @@ import type { Speed } from './config.ts';
 import type { Db, Queryable } from './db/db.ts';
 import { afterIdle, capped, DEFAULT_GLICKO, isProvisional, rateGame, ratePeriod, type Glicko, type Score } from './rating/glicko2.ts';
 import type { StoredReview } from '../src/analysis/reviewData.ts';
+import { indexGame } from './explorer/explorerStore.ts';
 
 export const CATEGORIES: readonly Speed[] = ['bullet', 'blitz', 'rapid', 'classical'];
 
@@ -430,6 +431,11 @@ export class Store {
           game.tournamentId ?? null,
         ],
       );
+      // the opening explorer counts every finished game from the standard start
+      await indexGame(tx, game, {
+        white: change ? Math.round(change.white.before.rating) : null,
+        black: change ? Math.round(change.black.before.rating) : null,
+      });
       return change;
     });
   }

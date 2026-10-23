@@ -126,6 +126,31 @@ export class Board {
     return b;
   }
 
+  /** The position as a FEN (move counters: half-move clock and move 1). */
+  toFen(): string {
+    const letters = ['', 'p', 'n', 'b', 'r', 'q', 'k'];
+    const rows: string[] = [];
+    for (let rank = 7; rank >= 0; rank--) {
+      let row = '';
+      let empty = 0;
+      for (let file = 0; file < 8; file++) {
+        const p = this.sq[rank * 16 + file]!;
+        if (!p) {
+          empty++;
+          continue;
+        }
+        if (empty) row += empty;
+        empty = 0;
+        const ch = letters[Math.abs(p)]!;
+        row += p > 0 ? ch.toUpperCase() : ch;
+      }
+      rows.push(empty ? row + empty : row);
+    }
+    const castling = [['K', 1], ['Q', 2], ['k', 4], ['q', 8]].filter(([, bit]) => this.castling & (bit as number)).map(([c]) => c).join('') || '-';
+    const ep = this.ep >= 0 ? squareName(this.ep) : '-';
+    return `${rows.join('/')} ${this.side > 0 ? 'w' : 'b'} ${castling} ${ep} ${this.halfmove} 1`;
+  }
+
   computeHash(k: ZobristKeys = K1): number {
     let h = 0;
     for (let s = 0; s < 128; s++) if (!(s & 0x88) && this.sq[s]) h ^= k.piece[pieceIndex(this.sq[s]!)]![s]!;

@@ -94,6 +94,38 @@ export const fetchGames = async (name: string, before: number) =>
   (await call<{ games: PublicGame[] }>(`/api/users/${encodeURIComponent(name)}/games?before=${before}`)).games;
 export const fetchGame = async (id: string) => (await call<{ game: PublicGame }>(`/api/games/${encodeURIComponent(id)}`)).game;
 export const fetchReview = async (id: string) => (await call<{ review: StoredReview | null }>(`/api/games/${encodeURIComponent(id)}/review`)).review;
+export type ExplorerSource = 'masters' | 'site' | 'mine';
+
+export interface ExplorerMove {
+  uci: string;
+  san: string;
+  white: number;
+  draws: number;
+  black: number;
+  averageRating: number | null;
+}
+
+export interface MineFilter {
+  color: 'w' | 'b';
+  speeds: Category[];
+  since: string;
+  until: string;
+}
+
+export const fetchExplorer = (source: ExplorerSource, fen: string, filter?: MineFilter) => {
+  const q = new URLSearchParams({ source, fen });
+  if (source === 'mine' && filter) {
+    q.set('color', filter.color);
+    if (filter.speeds.length) q.set('speeds', filter.speeds.join(','));
+    if (filter.since) q.set('since', filter.since);
+    if (filter.until) q.set('until', filter.until);
+  }
+  return call<{ source: ExplorerSource; available: boolean; moves: ExplorerMove[] }>(`/api/explorer?${q}`);
+};
+export const fetchOpening = async (moves: readonly string[]) =>
+  (await call<{ opening: { eco: string; name: string; ply: number } | null }>(`/api/opening?moves=${moves.join(',')}`)).opening;
+export const fetchBook = async (moves: readonly string[]) => (await call<{ book: boolean[] }>(`/api/explorer/book?moves=${moves.join(',')}`)).book;
+
 export type ServerAnalysis =
   | { enabled: boolean; status: 'none' | 'done' | 'failed' }
   | { enabled: true; status: 'queued'; position: number }

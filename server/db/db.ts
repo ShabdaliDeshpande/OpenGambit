@@ -116,6 +116,37 @@ export const MIGRATIONS: string[] = [
     reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     created_at BIGINT NOT NULL
   );`,
+  `CREATE TABLE explorer_moves (
+    source TEXT NOT NULL,
+    key TEXT NOT NULL,
+    uci TEXT NOT NULL,
+    san TEXT NOT NULL,
+    white INTEGER NOT NULL,
+    draws INTEGER NOT NULL,
+    black INTEGER NOT NULL,
+    rating_sum BIGINT NOT NULL,
+    rated_games INTEGER NOT NULL,
+    PRIMARY KEY (source, key, uci)
+  );
+  CREATE TABLE explorer_mine (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    uci TEXT NOT NULL,
+    san TEXT NOT NULL,
+    color TEXT NOT NULL,
+    speed TEXT NOT NULL,
+    month TEXT NOT NULL,
+    white INTEGER NOT NULL,
+    draws INTEGER NOT NULL,
+    black INTEGER NOT NULL,
+    PRIMARY KEY (user_id, key, uci, color, speed, month)
+  );
+  CREATE TABLE openings (
+    key TEXT PRIMARY KEY,
+    eco TEXT NOT NULL,
+    name TEXT NOT NULL,
+    ply INTEGER NOT NULL
+  );`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

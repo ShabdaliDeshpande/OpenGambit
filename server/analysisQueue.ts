@@ -10,6 +10,7 @@ import { scoreOf } from '../src/analysis/review.ts';
 import { toStoredReview } from '../src/analysis/savedReview.ts';
 import { reviewStats } from '../src/analysis/reviewData.ts';
 import type { UciMove } from '../src/engine/search.ts';
+import { Explorer } from './explorer/explorerStore.ts';
 
 export interface AnalyserRequest {
   /** The game's moves in UCI, from the standard start. */
@@ -146,7 +147,12 @@ export class AnalysisQueue {
       second: p.second ? scoreOf(p.second, fens[i]!) : null,
       pv: p.first?.pv ?? [],
     }));
-    const review = toStoredReview(evals, reviewMoves(moves, evals), SERVER_ENGINE, this.ms);
+    // book moves come from imported master games, when there are any
+    const flags = await new Explorer(this.store.db).bookFlags(game.moves);
+    const id = (fen: string, m: { from: string; to: string; promotion?: string }) => `${fen}|${m.from}${m.to}${m.promotion ?? ''}`;
+    const book = new Set(moves.filter((_m, i) => flags[i]).map(m => id(m.fenBefore, m.uci)));
+    const reviewed = reviewMoves(moves, evals, { isBook: (fen, m) => book.has(id(fen, m)) });
+    const review = toStoredReview(evals, reviewed, SERVER_ENGINE, this.ms);
     const { accuracy, performance } = reviewStats(review, 'w', { w: game.whiteRating, b: game.blackRating });
     await this.store.saveReview({
       gameId: game.id,

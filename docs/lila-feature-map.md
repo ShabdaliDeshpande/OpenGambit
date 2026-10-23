@@ -649,5 +649,5 @@ These sections plan the features the brief lists from chess.com's public feature
 - **14 Insights:** needs saved reviews (11) and opening names (13).
 - **15 Learning, 16 Bots, 17 Daily chess:** these don't depend on each other.
 - **One change from the brief (approved):** the engine's opening book moves from Phase 12 to Phase 13, so one PGN importer feeds both.
-- **Tablebases (approved as a stretch goal):** the rest of Phase 13 comes first.
+- **Tablebases (approved as a stretch goal):** the rest of Phase 13 came first. At the end of the phase the user chose to leave them out; they're listed under Known gaps.
 - **No new dependencies** are planned in any phase: charts are SVG, and the PGN reader, Syzygy reader and engine are our own code. If one turns out necessary, I'll ask first.
