@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Office Attendance</string>
+
+    <string name="today">Today</string>
+    <string name="today_present">✓ Present</string>
+    <string name="today_absent">Not in the office yet</string>
+    <string name="today_detail_unconfigured">Add your office Wi-Fi below to get started.</string>
+    <string name="today_detail_waiting">You\'ll be marked present as soon as your phone joins the office Wi-Fi.</string>
+    <string name="today_detail_manual">Marked by hand.</string>
+    <string name="today_detail_checked_in">Checked in at %1$s.</string>
+    <string name="today_detail_seen">Checked in at %1$s · last seen %2$s.</string>
+    <string name="wifi_none">Wi-Fi: not connected (or the name is hidden until setup is done)</string>
+    <string name="wifi_office">Wi-Fi: %1$s · office network</string>
+    <string name="wifi_other">Wi-Fi: %1$s</string>
+    <string name="check_now">Check now</string>
+
+    <string name="check_not_configured">Add your office Wi-Fi first.</string>
+    <string name="check_no_wifi">Can\'t see a Wi-Fi network. Connect to Wi-Fi and finish the setup steps.</string>
+    <string name="check_other">Connected to %1$s, which isn\'t an office network.</string>
+    <string name="check_marked">Marked present. You\'re on %1$s.</string>
+    <string name="check_already">Already marked present today.</string>
+
+    <string name="setup">Finish setup</string>
+    <string name="setup_intro">Android only tells apps the Wi-Fi name when they have location access, so attendance can\'t be marked automatically until these are done.</string>
+    <string name="setup_location">Location access</string>
+    <string name="setup_location_detail">Needed to read the Wi-Fi name. Choose \"Precise\".</string>
+    <string name="setup_background">Allow all the time</string>
+    <string name="setup_background_detail">Lets the app check the Wi-Fi when it isn\'t open.</string>
+    <string name="setup_location_off">Location is off</string>
+    <string name="setup_location_off_detail">Android hides Wi-Fi names while location is off.</string>
+    <string name="setup_notifications">Notifications</string>
+    <string name="setup_notifications_detail">Optional: get a note when you\'re marked present.</string>
+    <string name="setup_battery">Battery</string>
+    <string name="setup_battery_detail">Recommended: stops the phone from putting the app to sleep.</string>
+    <string name="action_allow">Allow</string>
+    <string name="action_turn_on">Turn on</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_add">Add</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_mark">Mark present</string>
+    <string name="allow_all_the_time">Allow all the time</string>
+    <string name="background_dialog_title">Check Wi-Fi in the background</string>
+    <string name="background_dialog_message">To mark you present without opening the app, choose \"%1$s\" on the next screen. The app only reads the Wi-Fi name; it never tracks where you are.</string>
+
+    <string name="office_wifi">Office Wi-Fi</string>
+    <string name="office_empty">No office network yet. When you\'re connected to the office Wi-Fi, tap \"Use current Wi-Fi\".</string>
+    <string name="add_current">Use current Wi-Fi</string>
+    <string name="add_typed">Type name</string>
+    <string name="add_dialog_title">Add office Wi-Fi</string>
+    <string name="add_dialog_message">Enter the network name exactly as it appears in your Wi-Fi settings.</string>
+    <string name="add_dialog_hint">Network name</string>
+    <string name="add_no_wifi">Not connected to Wi-Fi. Connect to the office Wi-Fi, then try again.</string>
+    <string name="add_location_off">Turn on location so Android shows the Wi-Fi name, then try again.</string>
+    <string name="added_network">Added %1$s as an office network.</string>
+    <string name="remove_network">Remove %1$s</string>
+
+    <string name="previous_month">Previous month</string>
+    <string name="next_month">Next month</string>
+    <string name="calendar_legend">Green: detected on office Wi-Fi. Light green: marked by hand. Tap a day to mark or unmark it.</string>
+    <string name="future_day">You can\'t mark a day that hasn\'t happened yet.</string>
+    <string name="mark_message">Mark %1$s as a day in the office?</string>
+    <string name="unmark_message">Remove %1$s from your attendance?</string>
+    <string name="day_present_wifi">%1$s, present</string>
+    <string name="day_present_manual">%1$s, present, marked by hand</string>
+    <string name="day_not_marked">%1$s</string>
+    <plurals name="month_summary">
+        <item quantity="one">%d day in the office</item>
+        <item quantity="other">%d days in the office</item>
+    </plurals>
+
+    <string name="export">Export attendance (CSV)</string>
+    <string name="export_failed">Couldn\'t save the file.</string>
+    <plurals name="exported">
+        <item quantity="one">Saved %d day.</item>
+        <item quantity="other">Saved %d days.</item>
+    </plurals>
+
+    <string name="channel_check_in">Check-ins</string>
+    <string name="notification_title">Marked present</string>
+    <string name="notification_text">Checked in at %1$s on %2$s</string>
+</resources>

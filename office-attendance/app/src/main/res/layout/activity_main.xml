@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:clipToPadding="false">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            style="@style/ScreenTitle"
+            android:text="@string/app_name" />
+
+        <LinearLayout style="@style/Card">
+
+            <TextView
+                style="@style/CardLabel"
+                android:text="@string/today" />
+
+            <TextView
+                android:id="@+id/today_status"
+                style="@style/Headline" />
+
+            <TextView
+                android:id="@+id/today_detail"
+                style="@style/Body" />
+
+            <TextView
+                android:id="@+id/wifi_status"
+                style="@style/Caption" />
+
+            <Button
+                android:id="@+id/check_now"
+                style="@style/PrimaryButton"
+                android:text="@string/check_now" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/setup_card"
+            style="@style/Card">
+
+            <TextView
+                style="@style/CardLabel"
+                android:text="@string/setup"
+                android:textColor="@color/warning" />
+
+            <TextView
+                style="@style/Caption"
+                android:text="@string/setup_intro" />
+
+            <LinearLayout
+                android:id="@+id/setup_steps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/Card">
+
+            <TextView
+                style="@style/CardLabel"
+                android:text="@string/office_wifi" />
+
+            <TextView
+                android:id="@+id/office_empty"
+                style="@style/Body"
+                android:text="@string/office_empty" />
+
+            <LinearLayout
+                android:id="@+id/office_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/add_current"
+                    style="@style/PrimaryButton"
+                    android:layout_width="0dp"
+                    android:layout_marginTop="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/add_current" />
+
+                <Button
+                    android:id="@+id/add_typed"
+                    style="@style/TextButton"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/add_typed" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout style="@style/Card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/previous_month"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/previous_month"
+                    android:src="@drawable/ic_chevron_left" />
+
+                <TextView
+                    android:id="@+id/month_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/next_month"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/next_month"
+                    android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/month_grid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/month_summary"
+                style="@style/Body"
+                android:layout_marginTop="8dp"
+                android:textStyle="bold" />
+
+            <TextView
+                style="@style/Caption"
+                android:text="@string/calendar_legend" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/export"
+            style="@style/TextButton"
+            android:layout_width="match_parent"
+            android:layout_marginTop="8dp"
+            android:text="@string/export" />
+    </LinearLayout>
+</ScrollView>
