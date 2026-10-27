@@ -352,16 +352,16 @@ The **Bots** tab is a gallery of ten opponents written for OpenGambit. Each has 
 
 | Bot | Style | Rating | What it plays |
 |---|---|---|---|
-| Pebble | Balanced | ≈410 | Almost random; a first opponent |
-| Biscuit | Pawn grabber | ≈810 | Takes anything offered, accepts every gambit |
-| Moss | Defender | ≈1340 | London System, Caro-Kann, Slav; trades a lot |
-| Sparkplug | Attacker | ≈1360 | King's Gambit, Dutch; checks whenever it can |
-| Inkwell | Balanced | ≈1680 | English, French; neat and sensible |
-| Magpie | Tricky | ≈1870 | Trappy lines; leaves bait |
-| Bonfire | Attacker | ≈1990 | Smith-Morra, Evans, Dragon, King's Indian |
-| Bastion | Defender | ≈2310 | Queen's Gambit Declined, Caro-Kann |
-| Riddle | Tricky | ≈2350 | Ruy Lopez, sharp Sicilians, Albin |
-| Summit | Balanced | ≈2720 | Main lines; the strongest bot |
+| Pebble | Balanced | ≈370 | Almost random; a first opponent |
+| Biscuit | Pawn grabber | ≈800 | Takes anything offered, accepts every gambit |
+| Moss | Defender | ≈960 | London System, Caro-Kann, Slav; trades a lot |
+| Sparkplug | Attacker | ≈1390 | King's Gambit, Dutch; checks whenever it can |
+| Inkwell | Balanced | ≈1650 | English, French; neat and sensible |
+| Magpie | Tricky | ≈1680 | Trappy lines; leaves bait |
+| Bonfire | Attacker | ≈1920 | Smith-Morra, Evans, Dragon, King's Indian |
+| Bastion | Defender | ≈2090 | Queen's Gambit Declined, Caro-Kann |
+| Riddle | Tricky | ≈2120 | Ruy Lopez, sharp Sicilians, Albin |
+| Summit | Balanced | ≈2500 | Main lines; the strongest bot |
 
 **Styles.** A style is a few extra terms in the engine's evaluation, seen from the bot's side only, plus bonuses when it picks a move. The numbered computer levels and the analysis engine don't use styles.
 - **Attackers** value pieces close to your king and like giving check.

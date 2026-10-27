@@ -50,7 +50,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'pebble',
     name: 'Pebble',
-    rating: 410,
+    rating: 370,
     style: 'balanced',
     tagline: 'Just learned how the pieces move.',
     description: 'Pebble moves almost at random and often leaves pieces where they can be taken. A friendly first opponent.',
@@ -73,7 +73,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'biscuit',
     name: 'Biscuit',
-    rating: 810,
+    rating: 800,
     style: 'materialist',
     tagline: 'Can’t resist a free pawn.',
     description: 'Biscuit takes anything that’s offered and counts every pawn twice. Leave something hanging and it will snap it up, even when it shouldn’t.',
@@ -99,7 +99,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'moss',
     name: 'Moss',
-    rating: 1340,
+    rating: 960,
     style: 'defender',
     tagline: 'Slow, steady and hard to knock over.',
     description: 'Moss keeps its king wrapped up tight and swaps pieces whenever it can. It won’t attack you much, but it won’t fall for much either.',
@@ -125,7 +125,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'sparkplug',
     name: 'Sparkplug',
-    rating: 1360,
+    rating: 1390,
     style: 'attacker',
     tagline: 'Goes straight for your king.',
     description: 'Sparkplug points every piece at your king and loves a check, sound or not. Keep your defences together and it often overreaches.',
@@ -151,7 +151,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'inkwell',
     name: 'Inkwell',
-    rating: 1680,
+    rating: 1650,
     style: 'balanced',
     tagline: 'Thinks before writing a move down.',
     description: 'Inkwell plays neat, sensible chess: it develops, takes the centre and rarely gives anything away for free.',
@@ -177,7 +177,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'magpie',
     name: 'Magpie',
-    rating: 1870,
+    rating: 1680,
     style: 'tricky',
     tagline: 'Leaves shiny things lying around.',
     description: 'Magpie picks moves that set traps: a piece that looks free, a check that leads nowhere. Ask yourself why it left that there.',
@@ -203,7 +203,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'bonfire',
     name: 'Bonfire',
-    rating: 1990,
+    rating: 1920,
     style: 'attacker',
     tagline: 'Gambits first, questions later.',
     description: 'Bonfire throws pawns into the fire to open lines against your king. Its attacks are faster and better aimed than Sparkplug’s.',
@@ -229,7 +229,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'bastion',
     name: 'Bastion',
-    rating: 2310,
+    rating: 2090,
     style: 'defender',
     tagline: 'A fortress with a plan.',
     description: 'Bastion defends patiently, trades your attackers away and waits for you to overstretch. Beating it takes real pressure.',
@@ -255,7 +255,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'riddle',
     name: 'Riddle',
-    rating: 2350,
+    rating: 2120,
     style: 'tricky',
     tagline: 'Every move is a question.',
     description: 'Riddle plays strong, sound moves that still ask you a question each turn. The obvious reply is often the wrong one.',
@@ -281,7 +281,7 @@ export const BOTS: readonly Bot[] = [
   {
     id: 'summit',
     name: 'Summit',
-    rating: 2720,
+    rating: 2500,
     style: 'balanced',
     tagline: 'The top of the mountain.',
     description: 'Summit is OpenGambit’s strongest bot: deep, accurate and patient, with master openings when the server has them.',
