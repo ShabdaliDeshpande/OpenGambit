@@ -16,6 +16,7 @@ import {
   ROOK,
   squareName,
 } from './board.ts';
+import { changesEvaluation, styleTerms, type PlayStyle } from './style.ts';
 
 /**
  * This app's own engine: negamax with alpha-beta pruning, principal
@@ -36,6 +37,8 @@ export interface Level {
   /** Uniform random noise added to root scores, in centipawns. */
   noise: number;
   quiescence: boolean;
+  /** A bot's playing style (Phase 16); the numbered levels have none. */
+  style?: PlayStyle;
 }
 
 export const LEVELS: readonly Level[] = [
@@ -348,6 +351,13 @@ export const toUci = (m: number): UciMove => {
 
 const isMateScore = (s: number) => Math.abs(s) > MATE_BOUND;
 
+/** A tempting reply that loses this much (centipawns) against the opponent's best reply counts as a trap. */
+const TRAP_LOSS = 200;
+/** Time allowed for the root bonuses after the search. */
+const BONUS_MS = 250;
+/** At most this many candidate moves are checked for traps. */
+const TRAP_CANDIDATES = 5;
+
 class Searcher {
   nodes = 0;
   readonly b: Board;
@@ -355,18 +365,21 @@ class Searcher {
   private readonly deadline: number;
   private readonly now: () => number;
   private readonly quiescence: boolean;
+  /** A style's extra evaluation (White's point of view), if any. */
+  private readonly extra: ((b: Board) => number) | null;
   private readonly killers = new Int32Array(MAX_PLY * 2 + 4);
   /** Quiet moves that caused cut-offs, by piece and target square. */
   private readonly history = new Int32Array(13 * 128);
   /** Triangular PV table: pv[ply] is the best line found from that ply in the current search. */
   private readonly pv: number[][] = Array.from({ length: MAX_PLY + 16 }, () => []);
 
-  constructor(b: Board, tt: TranspositionTable, deadline: number, now: () => number, quiescence = true) {
+  constructor(b: Board, tt: TranspositionTable, deadline: number, now: () => number, quiescence = true, extra: ((b: Board) => number) | null = null) {
     this.b = b;
     this.tt = tt;
     this.deadline = deadline;
     this.now = now;
     this.quiescence = quiescence;
+    this.extra = extra;
   }
 
   private checkTime() {
@@ -396,7 +409,7 @@ class Searcher {
     return scored.map(x => x.m);
   }
 
-  private sideEval = () => this.b.side * evaluateBoard(this.b);
+  private sideEval = () => this.b.side * (evaluateBoard(this.b) + (this.extra ? this.extra(this.b) : 0));
 
   private quiesce(alpha: number, beta: number, qdepth: number, ply: number): number {
     this.checkTime();
@@ -572,6 +585,46 @@ class Searcher {
   }
 
   /**
+   * How much of a trap root move `m` sets, from 0 to 1: the share of the
+   * opponent's replies, weighted towards tempting ones (captures and checks),
+   * that are captures or checks losing at least TRAP_LOSS against their best
+   * reply. Each reply is looked at one ply deep plus captures.
+   */
+  trapValue(m: number): number {
+    const b = this.b;
+    if (!b.make(m)) return 0;
+    try {
+      const replies: { score: number; weight: number; tempting: boolean }[] = [];
+      for (const r of b.generate()) {
+        const capture = !!(moveFlags(r) & F_CAPTURE);
+        if (!b.make(r)) continue;
+        try {
+          const tempting = capture || b.inCheck();
+          // the reply's score for the opponent, who just played it
+          replies.push({ score: -this.negamax(1, -INF, INF, 2), weight: tempting ? 2 : 1, tempting });
+        } finally {
+          b.unmake();
+        }
+      }
+      if (!replies.length) return 0;
+      const best = Math.max(...replies.map(r => r.score));
+      const total = replies.reduce((a, r) => a + r.weight, 0);
+      const bad = replies.reduce((a, r) => a + (r.tempting && r.score <= best - TRAP_LOSS ? r.weight : 0), 0);
+      return bad / total;
+    } finally {
+      b.unmake();
+    }
+  }
+
+  /** Whether root move `m` gives check. */
+  givesCheck(m: number): boolean {
+    if (!this.b.make(m)) return false;
+    const check = this.b.inCheck();
+    this.b.unmake();
+    return check;
+  }
+
+  /**
    * Validates `pv` move by move (dropping anything illegal) and extends it
    * along transposition-table moves up to `maxLen` moves. Exact entries and
    * lower bounds are followed: in both, the stored move is the best one found.
@@ -607,6 +660,8 @@ export interface EngineMove extends UciMove {
   score: number;
   /** Deepest fully completed search depth. */
   depth: number;
+  /** The best root score found (`score` is lower when noise or a style picked another move). */
+  best: number;
 }
 
 export interface SearchOptions {
@@ -624,18 +679,22 @@ interface RootScore {
  * repetitions are seen. Returns null if there are no legal moves.
  * `chess` itself is not modified.
  */
-export function chooseMove(chess: Chess, level: number, opts: SearchOptions = {}): EngineMove | null {
-  const settings = levelSettings(level);
+export function chooseMove(chess: Chess, level: number | Level, opts: SearchOptions = {}): EngineMove | null {
+  const settings = typeof level === 'number' ? levelSettings(level) : level;
+  const style = settings.style;
   const rng = opts.rng ?? Math.random;
   const now = opts.now ?? (() => performance.now());
   const b = boardFromChess(chess);
-  const s = new Searcher(b, new TranspositionTable(17), now() + settings.maxMs, now, settings.quiescence);
+  const botSide = b.side;
+  const extra = style && changesEvaluation(style) ? (x: Board) => styleTerms(x, botSide, style) : null;
+  const tt = new TranspositionTable(17);
+  const s = new Searcher(b, tt, now() + settings.maxMs, now, settings.quiescence, extra);
   const rootMoves = s.order(b.legalMoves());
   if (rootMoves.length === 0) return null;
 
-  // Noisy levels need an exact score for every root move, so each is searched
-  // with a full window; strict levels only need the best move.
-  const noisy = settings.noise > 0;
+  // Noisy levels, and styles with root bonuses, need an exact score for every
+  // root move, so each is searched with a full window; strict levels only need the best move.
+  const noisy = settings.noise > 0 || !!(style?.checks || style?.traps);
   let completed: RootScore[] | null = null;
   let completedDepth = 0;
 
@@ -656,16 +715,51 @@ export function chooseMove(chess: Chess, level: number, opts: SearchOptions = {}
     if (completed?.some(r => r.score > MATE_BOUND)) break; // forced mate found
   }
 
+  const bonus = style ? rootBonuses(new Searcher(b, tt, now() + BONUS_MS, now, settings.quiescence, extra), completed!, style) : null;
   let pick = completed![0]!;
   let pickValue = -INF;
   for (const c of completed!) {
-    const value = c.score + (isMateScore(c.score) ? 0 : (rng() * 2 - 1) * settings.noise);
+    const value = c.score + (isMateScore(c.score) ? 0 : (rng() * 2 - 1) * settings.noise + (bonus?.get(c.move) ?? 0));
     if (value > pickValue) {
       pickValue = value;
       pick = c;
     }
   }
-  return { ...toUci(pick.move), score: pick.score, depth: completedDepth };
+  return { ...toUci(pick.move), score: pick.score, depth: completedDepth, best: Math.max(...completed!.map(c => c.score)) };
+}
+
+/**
+ * A style's bonuses for the root moves: checks for every checking move, and
+ * traps for the few moves close enough to the best for the bonus to matter.
+ * Stops quietly when its time runs out.
+ */
+function rootBonuses(s: Searcher, scores: readonly RootScore[], style: PlayStyle): Map<number, number> {
+  const out = new Map<number, number>();
+  const best = Math.max(...scores.map(c => c.score));
+  if (isMateScore(best)) return out;
+  try {
+    if (style.checks) for (const c of scores) if (s.givesCheck(c.move)) out.set(c.move, style.checks);
+    if (style.traps) {
+      const close = scores.filter(c => c.score + style.traps! > best && !isMateScore(c.score)).sort((x, y) => y.score - x.score).slice(0, TRAP_CANDIDATES);
+      for (const c of close) out.set(c.move, (out.get(c.move) ?? 0) + Math.round(style.traps * s.trapValue(c.move)));
+    }
+  } catch (e) {
+    if (!(e instanceof Timeout)) throw e;
+  }
+  return out;
+}
+
+/** How much of a trap `move` sets in this position, 0 to 1 (see Searcher.trapValue). */
+export function trapValue(fen: string, move: UciMove, now: () => number = () => performance.now()): number {
+  const b = Board.fromFen(fen);
+  const m = b.legalMoves().find(x => sameUci(x, move));
+  if (m === undefined) return 0;
+  try {
+    return new Searcher(b, new TranspositionTable(16), now() + 2000, now).trapValue(m);
+  } catch (e) {
+    if (!(e instanceof Timeout)) throw e;
+    return 0;
+  }
 }
 
 /** Whether the engine (playing `color`) accepts a draw offer in this position. */

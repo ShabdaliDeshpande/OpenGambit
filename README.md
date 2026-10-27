@@ -346,6 +346,50 @@ Edit `public/videos.json` (it goes into the build as `/videos.json`):
 - **Playback:** YouTube links play on the page in YouTube's privacy-enhanced (youtube-nocookie) player, and only once you press play. Other links open in a new tab.
 - **Updates:** returning visitors may see a change one visit late, because the service worker refreshes the file in the background.
 
+## Features (Phase 16: Bots)
+
+The **Bots** tab is a gallery of ten opponents written for OpenGambit. Each has its own name, face (drawn in SVG by the app), playing style, opening repertoire and things to say. Everyone can play them. Results are kept in the browser, and also on your account when you're signed in.
+
+| Bot | Style | Rating | What it plays |
+|---|---|---|---|
+| Pebble | Balanced | ≈410 | Almost random; a first opponent |
+| Biscuit | Pawn grabber | ≈810 | Takes anything offered, accepts every gambit |
+| Moss | Defender | ≈1340 | London System, Caro-Kann, Slav; trades a lot |
+| Sparkplug | Attacker | ≈1360 | King's Gambit, Dutch; checks whenever it can |
+| Inkwell | Balanced | ≈1680 | English, French; neat and sensible |
+| Magpie | Tricky | ≈1870 | Trappy lines; leaves bait |
+| Bonfire | Attacker | ≈1990 | Smith-Morra, Evans, Dragon, King's Indian |
+| Bastion | Defender | ≈2310 | Queen's Gambit Declined, Caro-Kann |
+| Riddle | Tricky | ≈2350 | Ruy Lopez, sharp Sicilians, Albin |
+| Summit | Balanced | ≈2720 | Main lines; the strongest bot |
+
+**Styles.** A style is a few extra terms in the engine's evaluation, seen from the bot's side only, plus bonuses when it picks a move. The numbered computer levels and the analysis engine don't use styles.
+- **Attackers** value pieces close to your king and like giving check.
+- **Defenders** value cover around their own king and like trading pieces off.
+- **Tricky** bots look at the moves close to their best and prefer one where a tempting reply (a capture or a check) loses at least two pawns' worth.
+- **The pawn grabber** counts material extra.
+
+Strength comes from search depth, time and how much random noise is added to its choices, as with the levels.
+
+**Openings.** Each bot follows a few lines of its own while you stay on them. The four strongest also play master moves for the first 16 plies when master games have been imported (Phase 13), and then the engine takes over.
+
+**Chat.** A bot greets you, sometimes comments on its captures and checks, and says something at the end. It also sometimes reacts when its own search sees that your last move was a blunder by Game Review's rules. Each comment has a chance, so it doesn't talk on every move.
+
+**Modes.**
+- **Challenge:** no help. A win or a draw is recorded on the bot's card (Beaten ✓ or Drawn ½).
+- **Assisted:** switch on any of these, before or during the game:
+  - a hint (the piece to move);
+  - takebacks;
+  - the evaluation bar;
+  - threats (what the bot would play if it were its move);
+  - a best-move arrow.
+
+  Assisted games aren't recorded.
+
+A game in progress is kept in the browser, so you can leave and resume it, or abandon it.
+
+**Ratings.** `npm run bots:rate` plays every bot against its two neighbours in the gallery and the three engine levels closest to it. The levels also play each other. It then fits Elo-style ratings to all the results, with level 1 pinned at 400. The run that set the current numbers played 424 games, 8 for each pairing. Every bot finished in gallery order, from Pebble, at level 1's strength, to Summit, between levels 7 and 8. Ratings fitted from games between engines spread out more than ratings against people, so treat the top of the scale as "much stronger", not as a title-holder's number. The numbers are relative to that anchor, not measured from games against people.
+
 ## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
@@ -399,6 +443,7 @@ src/
     search.ts     principal variation search with null-move pruning, late-move reductions,
                   transposition table, quiescence, killer and history ordering; tapered
                   evaluation, play levels and multi-line analysis
+    style.ts      the bots' playing styles: extra evaluation terms from the bot's side
     engine.worker.ts  runs a move search or an analysis in a Web Worker
   components/   Board (with arrows), Piece, PromotionPicker, ClockDisplay, MoveList, GameControls,
                 SetupPanel, PgnFenPanel, PlayView
@@ -418,6 +463,9 @@ src/
   learn/        lessons and their rules (level.ts), drills, endgame goals and grading, the video list check,
                 progress keys and merging (progress.ts, shared with the server), puzzle explanations
   components/learn/    LearnView, LessonPlayer, DrillPlayer, EndgamePlayer, VideoLibrary
+  bots/         the bot gallery (bots.ts), opening lines (repertoire.ts), chat (chat.ts), and the
+                rules for modes, assists, takebacks and saved games (botGame.ts)
+  components/bots/     BotsView (gallery and setup), BotGame, BotAvatar (SVG faces)
   App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
 server/         the server (Node, run directly from TypeScript)
   backend.ts    opens the database and wires the API and game server together
@@ -452,6 +500,8 @@ scripts/import-explorer.ts, import-openings.ts, index-site-explorer.ts  the expl
 scripts/smoke-explorer.ts  end-to-end check of the explorer tabs, opening names and book moves
 scripts/smoke-insights.ts  end-to-end check of insights: games with clocks, a review, private then public
 scripts/smoke-learn.ts  end-to-end check of learning progress: saving, keeping the better result, accounts kept apart
+scripts/smoke-bots.ts  end-to-end check of bot results kept with the account (a win beats a draw)
+scripts/bot-ratings.ts  plays the bots against each other and the engine levels and fits their ratings (npm run bots:rate)
 ```
 
 chess.js is the single source of truth for rules, SAN, PGN and FEN. The engine has its own move generator only because chess.js is too slow for searching: about 2,000 positions per second, compared with hundreds of thousands. Perft tests check the engine's generator against the standard published node counts.
@@ -529,6 +579,9 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Insights only cover online games played while signed in,** and the Time card only games from Phase 14 on (when clock times started being saved). Berserk games in tournaments count time trouble against the full starting clock.
 - **Lessons are a fixed set of 23 levels,** and drills draw from the 65 built-in puzzles, so a drill repeats its positions in a different order each run.
 - **Endgame practice is judged by a 0.8-second search,** without tablebases. The engine usually defends well in these simple endings but not always perfectly, and a grade can be off in a close case.
+- **Bot games are untimed,** and the bots' chat is a fixed set of lines for each event. A bot's style nudges its choices rather than changing how strong it is.
+- **Bot ratings are estimates** from games between bots and engine levels, pinned to level 1 = 400, so they may not match your own rating anywhere else.
+- **A bot game in progress is kept per browser,** not on the account. Only Challenge-mode wins and draws are recorded.
 - **Learning progress can't be reset from the app yet.** Clearing the site's data resets a guest's progress.
 - **No endgame tablebases.** Server-side analysis exists but is off unless the server is started with `ANALYSIS_QUEUE=1`, and its queue lives in memory: a restart drops games still waiting.
 - **Drawn shapes need a mouse.** Touch screens can't right-click, so there's no way to draw on a phone or tablet yet.

@@ -941,9 +941,10 @@ button.analyse-game {
     order: 3;
     width: 100%;
     margin: 0;
+    flex-wrap: wrap;
   }
   .tabs button {
-    flex: 1;
+    flex: 1 1 auto;
   }
 }
 
@@ -2666,4 +2667,202 @@ button.daily-button {
 
 .video-empty p {
   margin: 0 0 6px;
+}
+
+/* ---------- bots ---------- */
+
+.bots-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-areas: 'main setup';
+  gap: 20px;
+  align-items: start;
+}
+
+.bots-setup {
+  grid-area: setup;
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bots-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .bots-home {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'setup' 'main';
+  }
+  .bots-setup {
+    position: static;
+  }
+}
+
+.bots-setup p,
+.bot-resume p {
+  margin: 0;
+}
+
+.bot-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bot-who h2 {
+  margin: 0;
+  font-size: 18px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.bot-who p {
+  margin: 2px 0 0;
+}
+
+.bot-avatar {
+  flex: none;
+  display: block;
+}
+
+.bot-choice {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bot-choice legend {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.bot-assists {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.bot-assists label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bot-assists input {
+  flex: none;
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.bot-gallery {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.bot-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.bot-card:hover {
+  border-color: var(--accent);
+}
+
+.bot-card.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.bot-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bot-card-text strong {
+  font-size: 16px;
+}
+
+.bot-badge {
+  margin-top: 4px;
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.bot-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bot-header .link-button {
+  align-self: flex-start;
+  padding-top: 0;
+}
+
+.bot-chat {
+  position: relative;
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  font-size: 14px;
+  animation: bot-chat-in 0.25s ease-out;
+}
+
+.bot-chat::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 20px;
+  border: 6px solid transparent;
+  border-top: 0;
+  border-bottom-color: var(--surface-2);
+}
+
+@keyframes bot-chat-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-chat {
+    animation: none;
+  }
 }

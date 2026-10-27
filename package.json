@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "puzzles:import": "node scripts/import-puzzles.ts",
     "engine:match": "node --experimental-transform-types scripts/engine-match.ts",
+    "bots:rate": "node --experimental-transform-types scripts/bot-ratings.ts",
     "explorer:import": "node scripts/import-explorer.ts",
     "openings:import": "node scripts/import-openings.ts",
     "explorer:index-site": "node scripts/index-site-explorer.ts",

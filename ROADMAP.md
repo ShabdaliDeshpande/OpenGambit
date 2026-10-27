@@ -104,7 +104,7 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - A video library read from a JSON file you fill in.
 - Free for guests; progress kept in the browser, and on the account when signed in.
 
-## Phase 16: Bots (planned)
+## Phase 16: Bots (done)
 - A gallery of original named bots, each with a rating, style, repertoire, avatar and chat lines.
 - Assisted mode with hints, takebacks, eval, threats and best move, each toggleable. Challenge mode has no help.
 

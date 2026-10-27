@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drillKey, endgameKey, lessonKey, mergeProgress, stageStars, validItem } from './progress';
+import { botKey, drillKey, endgameKey, lessonKey, mergeProgress, stageStars, validItem } from './progress';
 
 describe('learning progress', () => {
   it('checks entries', () => {
@@ -11,6 +11,14 @@ describe('learning progress', () => {
     expect(validItem('bonus:rook', 3)).toBe(false);
     expect(validItem(lessonKey('Rook 1'), 3)).toBe(false);
     expect(validItem(lessonKey('rook-1'), 2.5)).toBe(false);
+    expect(validItem(botKey('magpie'), 2)).toBe(true);
+    expect(validItem(botKey('magpie'), 1)).toBe(true);
+    expect(validItem(botKey('magpie'), 3)).toBe(false);
+  });
+
+  it('keeps the better result against a bot: a win over a draw', () => {
+    expect(mergeProgress({ [botKey('moss')]: 1 }, { [botKey('moss')]: 2 })).toEqual({ [botKey('moss')]: 2 });
+    expect(mergeProgress({ [botKey('moss')]: 2 }, { [botKey('moss')]: 1 })).toEqual({ [botKey('moss')]: 2 });
   });
 
   it('keeps the better result: more stars, the fastest drill', () => {

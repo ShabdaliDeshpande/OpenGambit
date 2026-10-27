@@ -38,6 +38,13 @@ describe('learning progress on the account', () => {
     expect(read).toEqual(merged);
   });
 
+  it('keeps bot results with the rest, a win beating a draw', async () => {
+    await post({ 'bot:moss': 1, 'bot:summit': 4 });
+    const after = (await (await post({ 'bot:moss': 2 })).json()) as { progress: object };
+    expect(after.progress).toEqual({ 'bot:moss': 2 });
+    expect((await (await post({ 'bot:moss': 1 })).json()) as object).toEqual({ progress: { 'bot:moss': 2 } });
+  });
+
   it('needs an account, and a sensible request', async () => {
     expect((await post({ 'lesson:rook-1': 3 }, false)).status).toBe(401);
     expect((await fetch(`${base}/api/learn/progress`)).status).toBe(401);

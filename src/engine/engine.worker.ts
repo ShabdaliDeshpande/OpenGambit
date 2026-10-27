@@ -17,7 +17,7 @@ scope.onmessage = e => {
     if (req.type === 'move') {
       const chess = new Chess(req.startFen);
       for (const m of req.moves) chess.move(m);
-      scope.postMessage({ type: 'move', id: req.id, move: chooseMove(chess, req.level) });
+      scope.postMessage({ type: 'move', id: req.id, move: chooseMove(chess, req.settings ?? req.level) });
     } else {
       const info = analyse(req.startFen, req.moves, {
         multiPv: req.multiPv,

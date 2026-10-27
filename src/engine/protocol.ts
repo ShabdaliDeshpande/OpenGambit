@@ -1,4 +1,4 @@
-import type { AnalysisInfo, EngineMove, UciMove } from './search.ts';
+import type { AnalysisInfo, EngineMove, Level, UciMove } from './search.ts';
 
 /** Ask for a move to play (vs Computer). */
 export interface MoveRequest {
@@ -7,6 +7,8 @@ export interface MoveRequest {
   startFen: string;
   moves: UciMove[];
   level: number;
+  /** Custom settings (a bot's strength and style) instead of a numbered level. */
+  settings?: Level;
 }
 
 /** Analyse a position; the worker streams `info` after each depth, then `done`. */

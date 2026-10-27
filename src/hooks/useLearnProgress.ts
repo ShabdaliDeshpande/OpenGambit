@@ -50,7 +50,8 @@ export function useLearnProgress(signedIn: boolean) {
   const record = useCallback(
     (key: string, value: number) => {
       setProgress(p => {
-        const next = mergeProgress(p, { [key]: value });
+        // what another screen saved meanwhile is kept too
+        const next = mergeProgress(mergeProgress(p, load()), { [key]: value });
         if (next[key] === p[key]) return p;
         store(next);
         if (signedIn) void saveLearnProgress({ [key]: value }).catch(() => undefined);

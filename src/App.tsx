@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { Color } from 'chess.js';
 import { PlayView } from './components/PlayView';
 import { AnalysisView } from './components/analysis/AnalysisView';
@@ -8,17 +8,20 @@ import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
 import { ProfileView } from './components/account/ProfileView';
 import { InsightsView } from './components/account/InsightsView';
-import { LearnView } from './components/learn/LearnView';
 import { opposite } from './chess/clock';
 import type { GameSetup } from './chess/game';
 import { useAccount } from './hooks/useAccount';
 import { useTheme } from './hooks/useTheme';
 import { useSoundSetting } from './hooks/useGameSounds';
 
-type Tab = 'play' | 'online' | 'puzzles' | 'learn' | 'analysis' | 'profile' | 'insights';
+// loaded when their tab is first opened, to keep the first download small
+const LearnView = lazy(() => import('./components/learn/LearnView').then(m => ({ default: m.LearnView })));
+const BotsView = lazy(() => import('./components/bots/BotsView').then(m => ({ default: m.BotsView })));
 
-const TABS = ['play', 'online', 'puzzles', 'learn', 'analysis'] as const;
-const TAB_LABEL: Record<(typeof TABS)[number], string> = { play: 'Play', online: 'Play online', puzzles: 'Puzzles', learn: 'Learn', analysis: 'Analysis board' };
+type Tab = 'play' | 'online' | 'bots' | 'puzzles' | 'learn' | 'analysis' | 'profile' | 'insights';
+
+const TABS = ['play', 'online', 'bots', 'puzzles', 'learn', 'analysis'] as const;
+const TAB_LABEL: Record<(typeof TABS)[number], string> = { play: 'Play', online: 'Play online', bots: 'Bots', puzzles: 'Puzzles', learn: 'Learn', analysis: 'Analysis board' };
 
 const USERNAME = /^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$/;
 
@@ -41,6 +44,11 @@ export default function App() {
     linkedInsights() ? 'insights' : linkedProfile() ? 'profile' : linkedOnline() ? 'online' : linkedPuzzle() || linkedPuzzleMode() ? 'puzzles' : 'play',
   );
   const [playOrientation, setPlayOrientation] = useState<Color>('w');
+  // once opened, the bots stay mounted so a game carries on while another tab is shown
+  const [botsOpened, setBotsOpened] = useState(false);
+  useEffect(() => {
+    if (tab === 'bots') setBotsOpened(true);
+  }, [tab]);
   const [analysisOrientation, setAnalysisOrientation] = useState<Color>('w');
   const [analysisRequest, setAnalysisRequest] = useState<AnalysisRequest | null>(null);
   const [signingIn, setSigningIn] = useState(false);
@@ -174,10 +182,21 @@ export default function App() {
           onAnalyse={analyse}
         />
       </div>
+      {(tab === 'bots' || botsOpened) && (
+        <div hidden={tab !== 'bots'}>
+          <Suspense fallback={<p className="muted">Loading the bots…</p>}>
+            <BotsView active={tab === 'bots'} signedIn={!!me} onAnalyse={analyse} />
+          </Suspense>
+        </div>
+      )}
       <div hidden={tab !== 'puzzles'}>
         <PuzzleView active={tab === 'puzzles'} onAnalyse={analyse} me={me} onRated={account.refresh} onSignIn={() => setSigningIn(true)} />
       </div>
-      {tab === 'learn' && <LearnView signedIn={!!me} />}
+      {tab === 'learn' && (
+        <Suspense fallback={<p className="muted">Loading…</p>}>
+          <LearnView signedIn={!!me} />
+        </Suspense>
+      )}
       <div hidden={tab !== 'analysis'}>
         <AnalysisView
           active={tab === 'analysis'}
