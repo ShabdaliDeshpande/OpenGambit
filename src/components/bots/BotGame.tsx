@@ -8,6 +8,7 @@ import { EvalBar } from '../analysis/EvalBar';
 import { opposite } from '../../chess/clock';
 import { buildChess, createGame, exportPgn, fenAt, gameReducer, isLive, liveFen, type GameState, type MoveRecord } from '../../chess/game';
 import { describeResult } from '../../chess/gameEnd';
+import { MAX_PREMOVES, takePremove, type Premove } from '../../chess/premove';
 import type { Score } from '../../analysis/accuracy';
 import { threatFen } from '../../analysis/rootSplit';
 import { acceptsDraw, type AnalysisLine, type EngineMove, type UciMove } from '../../engine/search';
@@ -80,6 +81,7 @@ export function BotGame({ bot, player, mode, assists, moves: initial, active, on
   const [notice, setNotice] = useState<string | null>(null);
   const [help, setHelp] = useState<{ ply: number; score: Score; best: UciMove | null } | null>(null);
   const [threat, setThreat] = useState<{ ply: number; move: UciMove | null } | null>(null);
+  const [premoves, setPremoves] = useState<Premove[]>([]);
   /** The bot's score after its last engine move, to spot your blunders. */
   const expect = useRef<Score | null>(null);
   const engine = useEngine();
@@ -143,6 +145,16 @@ export function BotGame({ bot, player, mode, assists, moves: initial, active, on
     if (mode === 'challenge') onResult(resultValue(game.result, player));
   }, [game.result]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // queued premoves are played one at a time as your turn comes back; one that no longer works drops the rest
+  useEffect(() => {
+    if (!premoves.length) return;
+    if (game.result) return setPremoves([]);
+    if (turn !== player) return;
+    const { move, rest } = takePremove(live, premoves);
+    setPremoves(rest);
+    if (move) dispatch({ type: 'move', ...move, now: performance.now() });
+  }, [game.id, game.moves.length, game.result, turn]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // keep the game in progress in the browser
   useEffect(() => {
     onSave(game.result ? null : game.moves.map(m => uciText(uciOf(m))));
@@ -202,6 +214,7 @@ export function BotGame({ bot, player, mode, assists, moves: initial, active, on
     const n = takeBackTo(game.moves, player);
     if (n === null) return;
     expect.current = null;
+    setPremoves([]);
     setNotice(null);
     dispatch({ type: 'replace', state: { ...game, moves: game.moves.slice(0, n), viewPly: n, result: null, drawOfferBy: null } });
   };
@@ -232,6 +245,10 @@ export function BotGame({ bot, player, mode, assists, moves: initial, active, on
           fen={fenAt(game, game.viewPly)}
           orientation={orientation}
           movableColor={yourTurn ? player : null}
+          premoveColor={!game.result && viewingLive ? player : null}
+          premoves={premoves}
+          onPremove={pm => setPremoves(q => (q.length < MAX_PREMOVES ? [...q, pm] : q))}
+          onCancelPremove={() => setPremoves([])}
           lastMove={lastMove}
           onMove={(from, to, promotion) => dispatch({ type: 'move', from, to, ...(promotion ? { promotion } : {}), now: performance.now() })}
           arrows={arrows}
