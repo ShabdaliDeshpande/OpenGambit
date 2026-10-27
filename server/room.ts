@@ -311,6 +311,7 @@ export class GameRoom {
     const seat = (c: Color) => ({
       id: this.seats[c].player.id,
       name: this.seats[c].player.name,
+      flair: this.seats[c].player.account?.user.flair ?? null,
       online: this.isOnline(c),
       registered: this.seats[c].player.account !== null,
       rating: this.ratings[c],

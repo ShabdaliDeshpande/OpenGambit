@@ -13,6 +13,7 @@ import type { OnlineClient, OnlineState } from '../../online/client';
 import { clockMs, fenAfter, onlinePgn, replay, withPending } from '../../online/view';
 import { diffText, ratingText } from '../../account/api';
 import type { AnalysedGame } from '../analysis/AnalysisView';
+import { Flair } from '../Flair';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 const seconds = (ms: number) => Math.ceil(ms / 1000);
@@ -156,6 +157,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
           ) : (
             s.name
           )}
+          <Flair flair={s.flair} />
           {s.rating && <span className="muted rating"> {ratingText(s.rating)}</span>}
           {s.diff !== null && <strong className={`diff ${s.diff >= 0 ? 'up' : 'down'}`}> {diffText(s.diff)}</strong>}
           {you === c && <span className="muted"> (you)</span>}

@@ -73,7 +73,7 @@ function storeSuite(name: string, open: () => Promise<Db>) {
       const user = (await store.createUser('dave', 'h'))!;
       const r = await store.ratings(user.id);
       expect(r.blitz).toEqual({ glicko: { rating: 1500, deviation: 500, volatility: 0.09 }, games: 0, updatedAt: 0 });
-      expect(Object.keys(r).sort()).toEqual(['blitz', 'bullet', 'classical', 'rapid']);
+      expect(Object.keys(r).sort()).toEqual(['blitz', 'bullet', 'classical', 'correspondence', 'rapid']);
     });
 
     it('scores a rated game for both players in one transaction', async () => {

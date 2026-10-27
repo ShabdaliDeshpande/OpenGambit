@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { changePassword, deleteAccount, fetchMe, setInsightsPublic } from '../../account/api';
+import { DailySettings } from './DailySettings';
 
 interface Props {
   username: string;
   /** Called after the account was deleted. */
   onDeleted: () => void;
+  /** Called when something shown elsewhere changed (the flair in the top bar). */
+  onChanged?: () => void;
 }
 
 /** Change password and delete account, shown on your own profile. */
-export function AccountSettings({ username, onDeleted }: Props) {
+export function AccountSettings({ username, onDeleted, onChanged = () => {} }: Props) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -68,6 +71,7 @@ export function AccountSettings({ username, onDeleted }: Props) {
   return (
     <section className="panel account-settings" aria-label="Account settings">
       <h2>Account settings</h2>
+      <DailySettings onChanged={onChanged} />
       <div className="settings-form">
         <h3>Insights</h3>
         <label className="row">

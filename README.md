@@ -390,6 +390,46 @@ A game in progress is kept in the browser, so you can leave and resume it, or ab
 
 **Ratings.** `npm run bots:rate` plays every bot against its two neighbours in the gallery and the three engine levels closest to it. The levels also play each other. It then fits Elo-style ratings to all the results, with level 1 pinned at 400. The run that set the current numbers played 424 games, 8 for each pairing. Every bot finished in gallery order, from Pebble, at level 1's strength, to Summit, between levels 7 and 8. Ratings fitted from games between engines spread out more than ratings against people, so treat the top of the scale as "much stronger", not as a title-holder's number. The numbers are relative to that anchor, not measured from games against people.
 
+## Features (Phase 17: Daily chess and flair)
+
+**📅 Daily** in **Play online** is correspondence chess: 1, 2, 3, 5, 7 or 14 days per move. Games last days, so they need an account. Running games are kept in the database, so a restart doesn't end them.
+
+**Playing.**
+- **Starting a game:** open a seek in the daily lobby or take someone else's, or challenge a player by name. Play as many games at once as you like.
+- **My games:** lists the games where it's your move first, with the time you have left.
+- **Rules:** moves are checked by the same rules as live games.
+- **Time:** your time for a move starts when your opponent moves. A check every minute ends games past their deadline. That's a loss on time, or a draw if the opponent couldn't mate, as in live play.
+- **Draws:** a draw offer stays open until it's answered or the opponent moves.
+- **After the game:** it's saved like any other online game, so it appears in your history and can be reviewed and analysed. Rated games count in a new **Daily** rating, shown on profiles, the leaderboard and Insights.
+
+**Conditional moves.** While you wait for your opponent, prepare replies. On the game's board, play the move you expect from them, then your answer, and add the line.
+- **When it matches:** if they play the first move of a line, your reply is played at once, and the line carries on.
+- **When it doesn't:** lines that don't match are dropped.
+- **Limits:** at most 30 lines of 30 moves. Lines must start from the current position (lila's rules).
+
+**Notifications.** The 🔔 in the top bar lists:
+- your move;
+- time running out (when 80% of it is used, as on lila);
+- new games and game results;
+- challenges;
+- conditional moves played;
+- tournament news.
+
+In your account settings you can also have them pop up as system notifications while OpenGambit is open in a tab.
+
+**Vacation.** 14 days per calendar year (UTC), used in whole days.
+- **Your games:** while you're away, your clocks are paused in every game where it's your move. A move your opponent makes meanwhile starts your clock only when the vacation ends.
+- **New games:** you can't start any until it ends, and your open seeks are withdrawn.
+- **Ending early:** whole days not yet started are given back.
+
+**Daily tournaments.** Any signed-in player can create one, with up to three open at a time. A tournament starts between 1 hour and 7 days ahead and takes up to 64 players.
+- **Swiss:** 3 to 9 rounds, paired like live Swiss tournaments. A round lasts as long as its games.
+- **Arena:** runs for 7, 14 or 28 days. When your game ends you're paired again, and scoring is the live Arena's, streaks included (no berserk).
+
+**Flair.** In account settings, pick one of 60 standard emoji, or none. It's shown next to your name in the live and daily lobbies, in games, on leaderboards and on your profile. The server accepts only emoji from that list. They're drawn by your device's own font, so there are no image files.
+
+**Testing the clock.** `scripts/smoke-daily.ts` needs a server started with `DAILY_TEST_CLOCK=1`. That turns on `POST /api/daily/test-clock`, which moves the daily clock forward. It's off in normal use.
+
 ## Playing the computer from an empty lobby
 
 **Nobody to play online?** When nobody else in the lobby is looking for a game, the lobby offers **🤖 Play the computer**, with a level choice and your last time control. If your own seek has waited 15 seconds with no taker, the same offer appears next to it, and taking it withdraws your seek. The game starts on the Play tab.
@@ -466,6 +506,10 @@ src/
   bots/         the bot gallery (bots.ts), opening lines (repertoire.ts), chat (chat.ts), and the
                 rules for modes, assists, takebacks and saved games (botGame.ts)
   components/bots/     BotsView (gallery and setup), BotGame, BotAvatar (SVG faces)
+  daily/        rules.ts (days per move, deadlines, vacation, conditional moves; shared with the server), api.ts
+  account/flair.ts  the allowed flair emoji (shared with the server)
+  components/daily/    DailyHome (my games, lobby, tournaments), DailyGame, DailyTourPage
+  components/NotificationBell.tsx, Flair.tsx, account/DailySettings.tsx (flair, vacation, notifications)
   App.tsx       tabs, theme and account; all screens stay mounted so a running game keeps its clock
 server/         the server (Node, run directly from TypeScript)
   backend.ts    opens the database and wires the API and game server together
@@ -481,6 +525,9 @@ server/         the server (Node, run directly from TypeScript)
   analysisQueue.ts  optional server-side game analysis: the queue, and saving the result as a review
   analysisWorker.ts the worker thread that runs the engine over a game
   insights/     insights.ts (the numbers, pure), insightsData.ts (loading and caching them)
+  daily/        daily.ts (daily chess: games, seeks, challenges, timeouts, reminders, vacation, notifications),
+                dailyTours.ts (daily Swiss and Arena), dailyStore.ts (the tables), dailyApi.ts (the routes)
+  http.ts       JSON replies, request bodies and HTTP errors, shared by the API modules
   explorer/     explorerStore.ts (move counts, My games, opening names, book moves), importer.ts,
                 pgnGames.ts (reads large PGN files and replays SAN quickly on the engine board)
   tournament/   manager.ts (lifecycle, timers, live pages), arena.ts (scoring, pairing),
@@ -501,6 +548,7 @@ scripts/smoke-explorer.ts  end-to-end check of the explorer tabs, opening names 
 scripts/smoke-insights.ts  end-to-end check of insights: games with clocks, a review, private then public
 scripts/smoke-learn.ts  end-to-end check of learning progress: saving, keeping the better result, accounts kept apart
 scripts/smoke-bots.ts  end-to-end check of bot results kept with the account (a win beats a draw)
+scripts/smoke-daily.ts  end-to-end check of daily chess: a seek, a move each, a conditional reply, a timeout (server started with DAILY_TEST_CLOCK=1)
 scripts/bot-ratings.ts  plays the bots against each other and the engine levels and fits their ratings (npm run bots:rate)
 ```
 
@@ -579,6 +627,10 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Insights only cover online games played while signed in,** and the Time card only games from Phase 14 on (when clock times started being saved). Berserk games in tournaments count time trouble against the full starting clock.
 - **Lessons are a fixed set of 23 levels,** and drills draw from the 65 built-in puzzles, so a drill repeats its positions in a different order each run.
 - **Endgame practice is judged by a 0.8-second search,** without tablebases. The engine usually defends well in these simple endings but not always perfectly, and a grade can be off in a close case.
+- **No push notifications or email.** There's no push service or mail server. Notifications are listed by the bell 🔔, and appear as system notifications only while a tab with OpenGambit is open.
+- **Deleting an account deletes its running daily games** without a result, and its open daily seeks and challenges.
+- **Daily tournaments have no moderation.** Any signed-in player can create one (up to three open at a time). In an Arena with an odd number of free players, one waits until another game ends.
+- **Conditional moves are prepared on the game's own board,** one line at a time. They can't be imported from the analysis board.
 - **Bot games are untimed,** and the bots' chat is a fixed set of lines for each event. A bot's style nudges its choices rather than changing how strong it is.
 - **Bot ratings are estimates** from games between bots and engine levels, pinned to level 1 = 400, so they may not match your own rating anywhere else.
 - **A bot game in progress is kept per browser,** not on the account. Only Challenge-mode wins and draws are recorded.

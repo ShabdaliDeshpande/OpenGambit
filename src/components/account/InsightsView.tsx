@@ -12,7 +12,7 @@ const PERIODS = [
 type Period = (typeof PERIODS)[number]['id'];
 
 /** Chart tokens for the rating lines, in a fixed order per speed. */
-const SPEED_COLOR: Record<Category, string> = { bullet: 'var(--viz-1)', blitz: 'var(--viz-2)', rapid: 'var(--viz-3)', classical: 'var(--viz-4)' };
+const SPEED_COLOR: Record<Category, string> = { bullet: 'var(--viz-1)', blitz: 'var(--viz-2)', rapid: 'var(--viz-3)', classical: 'var(--viz-4)', correspondence: 'var(--viz-5)' };
 
 const speedLabel = (s: string) => CATEGORY_LABEL[s as Category] ?? s;
 

@@ -8,18 +8,34 @@ import type { AnalysedGame } from '../analysis/AnalysisView';
 import { OnlineGame } from './OnlineGame';
 import { TournamentPage } from './TournamentPage';
 import { Tournaments } from './Tournaments';
+import { DailyHome } from '../daily/DailyHome';
+import { DailyGame } from '../daily/DailyGame';
+import { DailyTourPage } from '../daily/DailyTourPage';
 
 const ID = /^[A-Za-z0-9]{1,16}$/;
 
-type Screen = { kind: 'lobby' } | { kind: 'tours' } | { kind: 'leaders' } | { kind: 'tour'; id: string } | { kind: 'game'; id: string };
+type Screen =
+  | { kind: 'lobby' }
+  | { kind: 'tours' }
+  | { kind: 'leaders' }
+  | { kind: 'tour'; id: string }
+  | { kind: 'game'; id: string }
+  | { kind: 'daily' }
+  | { kind: 'dailyGame'; id: string }
+  | { kind: 'dailyTour'; id: string };
 
-/** The online screen named by the address: `?game=<id>`, `?tour=<id>`, `?tours` or `?leaders`. */
+/** The online screen named by the address: `?game=<id>`, `?tour=<id>`, `?tours`, `?leaders`, `?daily[=<game>]` or `?dailytour=<id>`. */
 function screenFromUrl(): Screen {
   const q = new URLSearchParams(window.location.search);
   const game = q.get('game');
   const tour = q.get('tour');
   if (game && ID.test(game)) return { kind: 'game', id: game };
   if (tour && ID.test(tour)) return { kind: 'tour', id: tour };
+  const daily = q.get('daily');
+  const dailyTour = q.get('dailytour');
+  if (daily && ID.test(daily)) return { kind: 'dailyGame', id: daily };
+  if (dailyTour && ID.test(dailyTour)) return { kind: 'dailyTour', id: dailyTour };
+  if (q.has('daily')) return { kind: 'daily' };
   if (q.has('tours')) return { kind: 'tours' };
   if (q.has('leaders')) return { kind: 'leaders' };
   return { kind: 'lobby' };
@@ -29,11 +45,27 @@ function screenFromUrl(): Screen {
 export const linkedOnline = (): boolean => screenFromUrl().kind !== 'lobby';
 
 const urlOf = (s: Screen) =>
-  s.kind === 'game' ? `?game=${s.id}` : s.kind === 'tour' ? `?tour=${s.id}` : s.kind === 'tours' ? '?tours' : s.kind === 'leaders' ? '?leaders' : window.location.pathname;
+  s.kind === 'game'
+    ? `?game=${s.id}`
+    : s.kind === 'tour'
+      ? `?tour=${s.id}`
+      : s.kind === 'tours'
+        ? '?tours'
+        : s.kind === 'leaders'
+          ? '?leaders'
+          : s.kind === 'daily'
+            ? '?daily'
+            : s.kind === 'dailyGame'
+              ? `?daily=${s.id}`
+              : s.kind === 'dailyTour'
+                ? `?dailytour=${s.id}`
+                : window.location.pathname;
 
 interface Props {
   active: boolean;
   signedIn: boolean;
+  /** Your account id, to find you in daily tournaments. */
+  meId: string | null;
   /** Your game ratings, to grey out seeks whose rating range you're outside. */
   myRatings: Me['ratings'] | null;
   /** Starts a game against the computer on the Play tab. */
@@ -43,7 +75,7 @@ interface Props {
   onAnalyse: (pgn: string, game?: AnalysedGame) => void;
 }
 
-export function OnlineView({ active, signedIn, myRatings, onPlayComputer, onSignIn, onOpenProfile, onAnalyse }: Props) {
+export function OnlineView({ active, signedIn, meId, myRatings, onPlayComputer, onSignIn, onOpenProfile, onAnalyse }: Props) {
   const [screen, setScreen] = useState<Screen>(screenFromUrl);
   const { client, state } = useOnline(active || screen.kind !== 'lobby');
   const seenStarted = useRef(0);
@@ -94,13 +126,16 @@ export function OnlineView({ active, signedIn, myRatings, onPlayComputer, onSign
           {connection}
         </p>
       )}
-      {screen.kind !== 'game' && (
+      {screen.kind !== 'game' && screen.kind !== 'dailyGame' && (
         <nav className="subnav" aria-label="Online play">
           <button type="button" className={screen.kind === 'lobby' ? 'on' : ''} onClick={() => go({ kind: 'lobby' })}>
             Lobby
           </button>
           <button type="button" className={screen.kind === 'tours' || screen.kind === 'tour' ? 'on' : ''} onClick={() => go({ kind: 'tours' })}>
             🏆 Tournaments
+          </button>
+          <button type="button" className={screen.kind === 'daily' || screen.kind === 'dailyTour' ? 'on' : ''} onClick={() => go({ kind: 'daily' })}>
+            📅 Daily
           </button>
           <button type="button" className={screen.kind === 'leaders' ? 'on' : ''} onClick={() => go({ kind: 'leaders' })}>
             🏅 Leaderboard
@@ -129,6 +164,34 @@ export function OnlineView({ active, signedIn, myRatings, onPlayComputer, onSign
           onSignIn={onSignIn}
           onBack={() => go({ kind: 'tours' })}
           onOpenGame={openGame}
+          onOpenProfile={onOpenProfile}
+        />
+      ) : screen.kind === 'dailyGame' ? (
+        <DailyGame
+          key={screen.id}
+          id={screen.id}
+          active={active}
+          onBack={() => go({ kind: 'daily' })}
+          onOpenProfile={onOpenProfile}
+          onOpenTour={id => go({ kind: 'dailyTour', id })}
+          onAnalyse={pgn => onAnalyse(pgn)}
+        />
+      ) : screen.kind === 'dailyTour' ? (
+        <DailyTourPage
+          key={screen.id}
+          id={screen.id}
+          meId={meId}
+          onSignIn={onSignIn}
+          onBack={() => go({ kind: 'daily' })}
+          onOpenGame={id => go({ kind: 'dailyGame', id })}
+          onOpenProfile={onOpenProfile}
+        />
+      ) : screen.kind === 'daily' ? (
+        <DailyHome
+          signedIn={signedIn}
+          onSignIn={onSignIn}
+          onOpenGame={id => go({ kind: 'dailyGame', id })}
+          onOpenTour={id => go({ kind: 'dailyTour', id })}
           onOpenProfile={onOpenProfile}
         />
       ) : screen.kind === 'leaders' ? (

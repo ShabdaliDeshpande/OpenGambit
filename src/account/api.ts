@@ -3,11 +3,12 @@
 
 import type { StoredReview } from '../analysis/reviewData';
 
-export type Category = 'bullet' | 'blitz' | 'rapid' | 'classical';
+/** Rating categories: the live speeds and daily (correspondence) chess. */
+export type Category = 'bullet' | 'blitz' | 'rapid' | 'classical' | 'correspondence';
 
-export const CATEGORIES: readonly Category[] = ['bullet', 'blitz', 'rapid', 'classical'];
+export const CATEGORIES: readonly Category[] = ['bullet', 'blitz', 'rapid', 'classical', 'correspondence'];
 
-export const CATEGORY_LABEL: Record<Category, string> = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical' };
+export const CATEGORY_LABEL: Record<Category, string> = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical', correspondence: 'Daily' };
 
 export interface PublicRating {
   rating: number;
@@ -30,6 +31,7 @@ export interface Me {
   puzzleRating: ShownRatingWithDeviation;
   /** Anyone may see this player's insights. */
   insightsPublic?: boolean;
+  flair?: string | null;
 }
 
 export interface Bucket {
@@ -96,7 +98,7 @@ export interface PublicGame {
 }
 
 export interface Profile {
-  user: { id: string; username: string; createdAt: number };
+  user: { id: string; username: string; createdAt: number; flair?: string | null };
   ratings: Record<Category, PublicRating>;
   puzzleRating: ShownRatingWithDeviation;
   runs?: RunBests;
@@ -112,7 +114,7 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(path: string, body?: unknown): Promise<T> {
+export async function call<T>(path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -217,7 +219,7 @@ export const fetchRuns = async () => (await call<{ runs: RunBests }>('/api/puzzl
 export const changePassword = (current: string, password: string) => call<{ ok: true }>('/api/account/password', { current, password });
 export const deleteAccount = (current: string, confirm: string) => call<{ user: null }>('/api/account/delete', { current, confirm });
 
-export type LeaderboardEntry = { username: string; rating: number; games: number };
+export type LeaderboardEntry = { username: string; flair?: string | null; rating: number; games: number };
 export const fetchLeaderboard = async () =>
   (await call<{ leaderboard: Record<Category | 'puzzle', LeaderboardEntry[]> }>('/api/leaderboard')).leaderboard;
 

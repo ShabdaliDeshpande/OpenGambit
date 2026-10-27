@@ -15,6 +15,7 @@ import { TERMINATION_LABEL } from '../../chess/gameEnd';
 import { gamePgn } from '../../online/view';
 import { AccountSettings } from './AccountSettings';
 import type { AnalysedGame } from '../analysis/AnalysisView';
+import { Flair } from '../Flair';
 
 const REASON: Record<string, string> = {
   checkmate: 'checkmate',
@@ -41,11 +42,12 @@ interface Props {
   onOpenProfile: (name: string) => void;
   onAnalyse: (pgn: string, game?: AnalysedGame) => void;
   onAccountDeleted: () => void;
+  onAccountChanged?: () => void;
   /** Opens this player's insights. */
   onOpenInsights?: (name: string) => void;
 }
 
-export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccountDeleted, onOpenInsights }: Props) {
+export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccountDeleted, onAccountChanged, onOpenInsights }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [games, setGames] = useState<PublicGame[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +130,10 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccoun
   return (
     <main className="profile">
       <section className="panel">
-        <h2 className="profile-name">{subject.username}</h2>
+        <h2 className="profile-name">
+          {subject.username}
+          <Flair flair={subject.flair} />
+        </h2>
         {onOpenInsights && (
           <button type="button" onClick={() => onOpenInsights(subject.username)} title={meId === subject.id ? 'Your insights' : 'Insights, if this player made them public'}>
             📈 Insights
@@ -240,7 +245,7 @@ export function ProfileView({ username, meId, onOpenProfile, onAnalyse, onAccoun
         {meId === subject.id && <p className="muted small">Games against guests are casual and saved without ratings.</p>}
       </section>
 
-      {meId === subject.id && <AccountSettings username={subject.username} onDeleted={onAccountDeleted} />}
+      {meId === subject.id && <AccountSettings username={subject.username} onDeleted={onAccountDeleted} {...(onAccountChanged ? { onChanged: onAccountChanged } : {})} />}
     </main>
   );
 }

@@ -102,7 +102,7 @@ describe('account settings API', () => {
     const board = ((await (await fetch(base + '/api/leaderboard')).json()) as { leaderboard: Record<string, { username: string; rating: number }[]> })
       .leaderboard;
     expect(board.blitz!.map(r => r.username)).toEqual(['Strong', 'Fine']);
-    expect(board.puzzle).toEqual([{ username: 'Solver', rating: 1900, games: 40 }]);
+    expect(board.puzzle).toEqual([{ username: 'Solver', flair: null, rating: 1900, games: 40 }]);
     expect(board.bullet).toEqual([]);
   });
 });

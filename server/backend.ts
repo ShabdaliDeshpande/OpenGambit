@@ -3,6 +3,7 @@ import { AnalysisQueue } from './analysisQueue.ts';
 import { createApi } from './api.ts';
 import { openDatabase } from './db/db.ts';
 import { Store } from './store.ts';
+import { DailyService } from './daily/daily.ts';
 import { attachGameServer } from './transport.ts';
 
 export interface Backend {
@@ -26,14 +27,23 @@ export async function startBackend(env: Record<string, string | undefined> = pro
   // server-side analysis is opt-in: it keeps a CPU core busy while games are queued
   const analysis = env.ANALYSIS_QUEUE === '1' ? new AnalysisQueue(store, undefined, { ms: Number(env.ANALYSIS_MS) || 600 }) : null;
   if (analysis) console.log(`Server analysis: on (${analysis.ms} ms per position)`);
-  const { handler, identify } = createApi(store, { trustProxy, analysis });
+  // the smoke test can move daily chess's clock forward; never on in normal use
+  let clockOffset = 0;
+  const testClock = env.DAILY_TEST_CLOCK === '1';
+  const daily = new DailyService(store, testClock ? { now: () => Date.now() + clockOffset } : {});
+  daily.start();
+  if (testClock) console.log('Daily chess: test clock on (POST /api/daily/test-clock)');
+  const { handler, identify } = createApi(store, { trustProxy, analysis, daily, advanceDailyClock: testClock ? ms => (clockOffset += ms) : null });
   console.log(`Database: ${db.engine === 'postgres' ? 'PostgreSQL (DATABASE_URL)' : `SQLite (${env.SQLITE_PATH ?? 'data/chess.db'})`}`);
   return {
     store,
     api: handler,
     attach: (http, options = {}) => {
       attachGameServer(http, {}, { trustProxy, store, identify, ...options });
-      http.on('close', () => void db.close());
+      http.on('close', () => {
+        daily.stop();
+        void db.close();
+      });
     },
   };
 }

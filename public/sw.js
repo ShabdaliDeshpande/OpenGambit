@@ -82,3 +82,19 @@ self.addEventListener('fetch', event => {
     }),
   );
 });
+
+// a system notification (daily chess) opens the app at its link, reusing an open tab if there is one
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url ?? '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const open = list.find(c => new URL(c.url).origin === self.location.origin);
+      if (!open) return self.clients.openWindow(url);
+      return open
+        .navigate(url)
+        .catch(() => open)
+        .then(c => (c ?? open).focus());
+    }),
+  );
+});

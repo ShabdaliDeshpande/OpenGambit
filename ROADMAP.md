@@ -108,7 +108,7 @@ An original chess web app whose behavior and UX are modeled on lila's (see `docs
 - A gallery of original named bots, each with a rating, style, repertoire, avatar and chat lines.
 - Assisted mode with hints, takebacks, eval, threats and best move, each toggleable. Challenge mode has no help.
 
-## Phase 17: Daily chess and flair (planned)
+## Phase 17: Daily chess and flair (done)
 - Correspondence games at 1, 2, 3, 5, 7 or 14 days per move, stored in the database.
 - Notifications, many games at once, and conditional moves.
 - Vacation days.

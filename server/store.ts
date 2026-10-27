@@ -6,12 +6,17 @@ import type { StoredReview } from '../src/analysis/reviewData.ts';
 import { indexGame } from './explorer/explorerStore.ts';
 import { mergeProgress, type Progress } from '../src/learn/progress.ts';
 
-export const CATEGORIES: readonly Speed[] = ['bullet', 'blitz', 'rapid', 'classical'];
+/** A rating category: the live speeds, plus daily (correspondence) games. */
+export type Category = Speed | 'correspondence';
+
+export const CATEGORIES: readonly Category[] = ['bullet', 'blitz', 'rapid', 'classical', 'correspondence'];
 
 export interface User {
   id: string;
   username: string;
   createdAt: number;
+  /** The emoji shown next to the name, if one is chosen. */
+  flair?: string | null;
 }
 
 export interface RatingInfo {
@@ -20,7 +25,7 @@ export interface RatingInfo {
   updatedAt: number;
 }
 
-export type Ratings = Record<Speed, RatingInfo>;
+export type Ratings = Record<Category, RatingInfo>;
 
 export interface GameRecord {
   id: string;
@@ -29,7 +34,7 @@ export interface GameRecord {
   whiteName: string;
   blackName: string;
   tc: string;
-  category: Speed;
+  category: Category;
   rated: boolean;
   moves: string[];
   /** The mover's remaining time in ms after each move (games from Phase 14 on). */
@@ -87,6 +92,7 @@ interface UserRow {
   id: string;
   username: string;
   created_at: number;
+  flair?: string | null;
 }
 
 interface GameRow {
@@ -96,7 +102,7 @@ interface GameRow {
   white_name: string;
   black_name: string;
   tc: string;
-  category: Speed;
+  category: Category;
   rated: number;
   moves: string;
   result: GameRecord['result'];
@@ -115,7 +121,7 @@ interface GameRow {
   has_review?: string | null;
 }
 
-const toUser = (r: UserRow): User => ({ id: r.id, username: r.username, createdAt: Number(r.created_at) });
+const toUser = (r: UserRow): User => ({ id: r.id, username: r.username, createdAt: Number(r.created_at), flair: r.flair ?? null });
 
 const toGame = (r: GameRow): StoredGame => ({
   id: r.id,
@@ -263,17 +269,17 @@ export class Store {
       if (/unique|duplicate/i.test(String((e as Error).message))) return null;
       throw e;
     }
-    return { id, username, createdAt: now };
+    return { id, username, createdAt: now, flair: null };
   }
 
   async userByName(username: string): Promise<User | undefined> {
-    const row = await this.db.get<UserRow>('SELECT id, username, created_at FROM users WHERE username_key = ?', [usernameKey(username)]);
+    const row = await this.db.get<UserRow>('SELECT id, username, created_at, flair FROM users WHERE username_key = ?', [usernameKey(username)]);
     return row && toUser(row);
   }
 
   async credentials(username: string): Promise<{ user: User; passwordHash: string } | undefined> {
     const row = await this.db.get<UserRow & { password_hash: string }>(
-      'SELECT id, username, created_at, password_hash FROM users WHERE username_key = ?',
+      'SELECT id, username, created_at, flair, password_hash FROM users WHERE username_key = ?',
       [usernameKey(username)],
     );
     return row && { user: toUser(row), passwordHash: row.password_hash };
@@ -294,7 +300,7 @@ export class Store {
 
   async userForSession(token: string): Promise<User | undefined> {
     const row = await this.db.get<UserRow>(
-      'SELECT u.id, u.username, u.created_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id_hash = ? AND s.expires_at > ?',
+      'SELECT u.id, u.username, u.created_at, u.flair FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id_hash = ? AND s.expires_at > ?',
       [hashToken(token), this.now()],
     );
     if (!row) return undefined;
@@ -335,9 +341,9 @@ export class Store {
    * The top players for a speed category or 'puzzle'. Only established
    * ratings (not provisional, at least 2 rated games) are listed.
    */
-  async leaderboard(category: Speed | 'puzzle', limit = 10): Promise<{ username: string; rating: number; games: number }[]> {
-    const rows = await this.db.all<{ username: string; rating: number; deviation: number; volatility: number; games: number; updated_at: number }>(
-      `SELECT u.username, r.rating, r.deviation, r.volatility, r.games, r.updated_at
+  async leaderboard(category: Category | 'puzzle', limit = 10): Promise<{ username: string; flair: string | null; rating: number; games: number }[]> {
+    const rows = await this.db.all<{ username: string; flair: string | null; rating: number; deviation: number; volatility: number; games: number; updated_at: number }>(
+      `SELECT u.username, u.flair, r.rating, r.deviation, r.volatility, r.games, r.updated_at
        FROM ratings r JOIN users u ON u.id = r.user_id
        WHERE r.category = ? AND r.games >= 2 ORDER BY r.rating DESC LIMIT ?`,
       [category, limit * 5],
@@ -346,6 +352,7 @@ export class Store {
     return rows
       .map(r => ({
         username: r.username,
+        flair: r.flair ?? null,
         games: Number(r.games),
         glicko: currentGlicko(
           {
@@ -359,7 +366,7 @@ export class Store {
       .filter(r => !isProvisional(r.glicko))
       .sort((a, b) => b.glicko.rating - a.glicko.rating)
       .slice(0, limit)
-      .map(r => ({ username: r.username, rating: Math.round(r.glicko.rating), games: r.games }));
+      .map(r => ({ username: r.username, flair: r.flair, rating: Math.round(r.glicko.rating), games: r.games }));
   }
 
   async pruneSessions(): Promise<void> {
@@ -367,7 +374,7 @@ export class Store {
   }
 
   async ratings(userId: string, q: Queryable = this.db): Promise<Ratings> {
-    const rows = await q.all<{ category: Speed; rating: number; deviation: number; volatility: number; games: number; updated_at: number }>(
+    const rows = await q.all<{ category: Category; rating: number; deviation: number; volatility: number; games: number; updated_at: number }>(
       'SELECT category, rating, deviation, volatility, games, updated_at FROM ratings WHERE user_id = ?',
       [userId],
     );
@@ -635,6 +642,10 @@ export class Store {
   }
 
   /** Whether anyone may see this player's insights (private by default). */
+  async setFlair(userId: string, flair: string | null): Promise<void> {
+    await this.db.run('UPDATE users SET flair = ? WHERE id = ?', [flair, userId]);
+  }
+
   async insightsPublic(userId: string): Promise<boolean> {
     const row = await this.db.get<{ insights_public: number }>('SELECT insights_public FROM users WHERE id = ?', [userId]);
     return Number(row?.insights_public ?? 0) === 1;

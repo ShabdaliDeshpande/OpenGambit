@@ -156,6 +156,72 @@ export const MIGRATIONS: string[] = [
     updated_at BIGINT NOT NULL,
     PRIMARY KEY (user_id, item)
   );`,
+  `ALTER TABLE users ADD COLUMN flair TEXT;
+  ALTER TABLE users ADD COLUMN vacation_until BIGINT;
+  ALTER TABLE users ADD COLUMN vacation_year INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN vacation_used INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE daily_games (
+    id TEXT PRIMARY KEY,
+    white_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    black_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    days INTEGER NOT NULL,
+    rated INTEGER NOT NULL,
+    moves TEXT NOT NULL,
+    turn_started BIGINT NOT NULL,
+    deadline BIGINT NOT NULL,
+    remind_at BIGINT,
+    draw_offer TEXT,
+    white_lines TEXT NOT NULL,
+    black_lines TEXT NOT NULL,
+    tour_id TEXT,
+    created_at BIGINT NOT NULL
+  );
+  CREATE INDEX daily_games_white ON daily_games (white_id);
+  CREATE INDEX daily_games_black ON daily_games (black_id);
+  CREATE INDEX daily_games_deadline ON daily_games (deadline);
+  CREATE INDEX daily_games_remind ON daily_games (remind_at);
+  CREATE TABLE daily_seeks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    days INTEGER NOT NULL,
+    color TEXT NOT NULL,
+    rated INTEGER NOT NULL,
+    created_at BIGINT NOT NULL
+  );
+  CREATE TABLE daily_challenges (
+    id TEXT PRIMARY KEY,
+    from_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    days INTEGER NOT NULL,
+    color TEXT NOT NULL,
+    rated INTEGER NOT NULL,
+    created_at BIGINT NOT NULL
+  );
+  CREATE TABLE notifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    game_id TEXT,
+    text TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    seen INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX notifications_user ON notifications (user_id, created_at);
+  CREATE TABLE daily_tours (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    days INTEGER NOT NULL,
+    rated INTEGER NOT NULL,
+    created_by TEXT,
+    status TEXT NOT NULL,
+    starts_at BIGINT NOT NULL,
+    ends_at BIGINT,
+    nb_rounds INTEGER,
+    round INTEGER NOT NULL DEFAULT 0,
+    data TEXT NOT NULL,
+    created_at BIGINT NOT NULL
+  );`,
 ];
 
 /** Splits a migration into statements (no semicolons appear inside our SQL strings). */

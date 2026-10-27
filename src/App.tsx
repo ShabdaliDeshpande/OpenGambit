@@ -7,6 +7,7 @@ import { linkedPuzzle, linkedPuzzleMode, PuzzleView } from './components/puzzles
 import { linkedOnline, OnlineView } from './components/online/OnlineView';
 import { AccountDialog } from './components/account/AccountDialog';
 import { ProfileView } from './components/account/ProfileView';
+import { NotificationBell } from './components/NotificationBell';
 import { InsightsView } from './components/account/InsightsView';
 import { opposite } from './chess/clock';
 import type { GameSetup } from './chess/game';
@@ -78,6 +79,12 @@ export default function App() {
     window.history.pushState(null, '', `?insights=${encodeURIComponent(name)}`);
   };
 
+  /** Opens an online-play address (a daily game, say) from anywhere. */
+  const openOnline = (url: string) => {
+    window.history.pushState(null, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   const chooseTab = (t: Tab) => {
     // leaving a profile or insights link: drop it from the address bar
     if ((tab === 'profile' || tab === 'insights') && t !== tab) window.history.pushState(null, '', window.location.pathname);
@@ -96,7 +103,8 @@ export default function App() {
       if (name) {
         setProfileName(name);
         setTab('profile');
-      } else setTab(t => (t === 'profile' || t === 'insights' ? 'play' : t));
+      } else if (linkedOnline()) setTab('online');
+      else setTab(t => (t === 'profile' || t === 'insights' ? 'play' : t));
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -133,13 +141,14 @@ export default function App() {
           </button>
           {account.me === undefined ? null : me ? (
             <>
+              <NotificationBell onOpen={openOnline} />
               <button
                 type="button"
                 className={tab === 'profile' && profileName?.toLowerCase() === me.username.toLowerCase() ? 'on account-button' : 'account-button'}
                 onClick={() => openProfile(me.username)}
                 title="Your profile"
               >
-                👤 {me.username}
+                {me.flair ?? '👤'} {me.username}
               </button>
               <button type="button" onClick={() => void account.signOut()}>
                 Sign out
@@ -172,6 +181,7 @@ export default function App() {
         <OnlineView
           active={tab === 'online'}
           signedIn={!!me}
+          meId={me?.id ?? null}
           myRatings={me?.ratings ?? null}
           onPlayComputer={setup => {
             setComputerGame(g => ({ setup, n: (g?.n ?? 0) + 1 }));
@@ -214,6 +224,7 @@ export default function App() {
           onOpenProfile={openProfile}
           onOpenInsights={openInsights}
           onAnalyse={analyse}
+          onAccountChanged={account.refresh}
           onAccountDeleted={() => {
             account.forget();
             chooseTab('play');

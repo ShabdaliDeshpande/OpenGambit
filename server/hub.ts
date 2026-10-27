@@ -297,6 +297,7 @@ export class Hub {
         id: s.id,
         owner: s.owner.id,
         name: s.owner.name,
+        flair: s.owner.account?.user.flair ?? null,
         registered: s.owner.account !== null,
         rating: this.shownRating(s.owner, s.tc),
         tc: s.tc.id,

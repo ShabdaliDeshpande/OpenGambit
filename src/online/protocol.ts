@@ -18,6 +18,8 @@ export interface SeekInfo {
   /** Public id of the player who created it. */
   owner: string;
   name: string;
+  /** The owner's flair (an emoji), if they chose one. */
+  flair?: string | null;
   /** Owner has an account (their name links to a profile). */
   registered: boolean;
   /** The owner's rating in this time control's category; null for guests. */
@@ -50,6 +52,7 @@ export interface LobbySnapshot {
 export interface SeatInfo {
   id: string;
   name: string;
+  flair?: string | null;
   online: boolean;
   registered: boolean;
   /** Rating in this game's category when the game started; null for guests. */

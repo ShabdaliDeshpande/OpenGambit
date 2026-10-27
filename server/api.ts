@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { TLSSocket } from 'node:tls';
+import { HttpError, isHttps, readJson, send } from './http.ts';
 import {
   checkPassword,
   checkUsername,
@@ -24,6 +24,8 @@ import { InsightsService } from './insights/insightsData.ts';
 import { validTimeZone } from './insights/insights.ts';
 import { validateFen } from 'chess.js';
 import type { Account } from './types.ts';
+import { DailyService } from './daily/daily.ts';
+import { dailyRoutes } from './daily/dailyApi.ts';
 
 export interface ApiOptions {
   trustProxy?: boolean;
@@ -40,53 +42,15 @@ export interface ApiOptions {
   maxReviewWrites?: number;
   /** Server-side game analysis, when it's turned on (ANALYSIS_QUEUE=1). */
   analysis?: AnalysisQueue | null;
+  /** Daily chess; made here when not given (its sweep timer is started by the backend). */
+  daily?: DailyService;
+  /** Moves the daily clock forward: only for the smoke test (DAILY_TEST_CLOCK=1). */
+  advanceDailyClock?: ((ms: number) => void) | null;
 }
 
-const MAX_BODY = 4096;
 /** A review carries a score, best move and short line for every position. */
 const MAX_REVIEW_BODY = 256 * 1024;
 const GAME_ID = /^[A-Za-z0-9]{1,16}$/;
-
-class HttpError extends Error {
-  readonly status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
-  res.end(JSON.stringify(body));
-}
-
-function readJson(req: IncomingMessage, maxBody = MAX_BODY): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    if (!(req.headers['content-type'] ?? '').startsWith('application/json')) return reject(new HttpError(415, 'Expected JSON.'));
-    let size = 0;
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      // keep reading (and dropping) the rest, so the 413 reply can still be sent
-      if (size <= maxBody) chunks.push(chunk);
-      else if (size > maxBody * 16) req.destroy();
-    });
-    req.on('end', () => {
-      if (size > maxBody) return reject(new HttpError(413, 'Request too large.'));
-      try {
-        const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
-        resolve(value as Record<string, unknown>);
-      } catch {
-        reject(new HttpError(400, 'Invalid JSON.'));
-      }
-    });
-    req.on('error', reject);
-  });
-}
-
-const isHttps = (req: IncomingMessage, trustProxy: boolean) =>
-  !!(req.socket as TLSSocket).encrypted || (trustProxy && req.headers['x-forwarded-proto'] === 'https');
 
 /** Ratings as the API shows them: rounded, with deviation, game count and the provisional flag. */
 export function publicRatings(ratings: Ratings, now: number) {
@@ -141,6 +105,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
   const explorer = new Explorer(store.db);
   const insightsService = new InsightsService(store.db);
   const progressWrites = new LoginLimiter(120, 10 * 60_000, now);
+  const daily = options.daily ?? new DailyService(store, { now });
 
   const puzzleRatingOf = async (userId: string) => {
     const g = currentGlicko(await store.puzzleRating(userId), now());
@@ -160,6 +125,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
           ratings: publicRatings(await store.ratings(user.id), now()),
           puzzleRating: await puzzleRatingOf(user.id),
           insightsPublic: await store.insightsPublic(user.id),
+          flair: user.flair ?? null,
         }
       : null;
 
@@ -167,6 +133,8 @@ export function createApi(store: Store, options: ApiOptions = {}) {
     const token = await store.createSession(user.id);
     send(res, 200, { user: await me(user) }, { 'set-cookie': sessionCookie(token, isHttps(req, trustProxy), SESSION_TTL_MS) });
   };
+
+  const dailyRoute = dailyRoutes({ store, daily, currentUser: req => currentUser(req), advanceClock: options.advanceDailyClock ?? null });
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://local');
@@ -335,6 +303,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
         if (token) await store.deleteSession(token);
         return send(res, 200, { user: null }, { 'set-cookie': clearedSessionCookie(isHttps(req, trustProxy)) });
       }
+      if (await dailyRoute(method, path, req, res)) return;
       throw new HttpError(404, 'Not found.');
     }
 
@@ -401,7 +370,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       const games = (await store.gamesOf(user.id, 20, before)).map(g => publicGame(g));
       if (history) return send(res, 200, { games });
       return send(res, 200, {
-        user: { id: user.id, username: user.username, createdAt: user.createdAt },
+        user: { id: user.id, username: user.username, createdAt: user.createdAt, flair: user.flair ?? null },
         ratings: publicRatings(await store.ratings(user.id), now()),
         puzzleRating: await puzzleRatingOf(user.id),
         runs: await store.runBests(user.id),
@@ -483,6 +452,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       return send(res, 200, { game: publicGame(stored, true) });
     }
 
+    if (await dailyRoute(method, path, req, res)) return;
     throw new HttpError(404, 'Not found.');
   }
 
@@ -507,5 +477,5 @@ export function createApi(store: Store, options: ApiOptions = {}) {
     return user ? { user, ratings: await store.ratings(user.id) } : null;
   };
 
-  return { handler, identify };
+  return { handler, identify, daily };
 }

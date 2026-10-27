@@ -5,6 +5,7 @@ import { MAX_LEVEL, MIN_LEVEL } from '../../engine/search';
 import { findTimeControl, speedOf, TIME_CONTROLS } from '../../chess/clock';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import { SEEK_RANGES, type SeekColor, type SeekInfo } from '../../online/protocol';
+import { Flair } from '../Flair';
 
 const COLOR_LABEL: Record<SeekColor, string> = { random: 'Random', w: 'White', b: 'Black' };
 const COLOR_ICON: Record<SeekColor, string> = { random: '◐', w: '○', b: '●' };
@@ -206,6 +207,7 @@ export function Lobby({ client, state, signedIn, myRatings, onPlayComputer, onSi
                       ) : (
                         s.name
                       )}
+                      <Flair flair={s.flair} />
                       {s.rating && <span className="muted"> {ratingText(s.rating)}</span>}
                       {own && <span className="muted"> (you)</span>}
                     </td>

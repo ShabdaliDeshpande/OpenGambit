@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CATEGORIES, CATEGORY_LABEL, fetchLeaderboard, type Category, type LeaderboardEntry } from '../../account/api';
+import { Flair } from '../Flair';
 
 const BOARDS: { key: Category | 'puzzle'; label: string }[] = [...CATEGORIES.map(c => ({ key: c, label: CATEGORY_LABEL[c] })), { key: 'puzzle', label: '🧩 Puzzles' }];
 
@@ -32,6 +33,7 @@ export function Leaderboard({ onOpenProfile }: { onOpenProfile: (name: string) =
                   <button type="button" className="link-button" onClick={() => onOpenProfile(e.username)}>
                     {e.username}
                   </button>
+                  <Flair flair={e.flair} />
                   <span className="rating">{e.rating}</span>
                 </li>
               ))}
