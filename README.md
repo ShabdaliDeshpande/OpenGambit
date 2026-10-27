@@ -25,7 +25,7 @@ npm run test:watch # run tests in watch mode
 | Board | Drag-to-move and click-to-move, dots on legal moves (rings on captures), last-move and check highlights, a promotion picker (Esc cancels), flip board (button or `f`), coordinates |
 | Modes | Two players on one device, or vs Computer at levels 1–8, playing White, Black or a random color |
 | Engine | An original alpha-beta engine in a Web Worker ([src/engine](src/engine)) |
-| Clocks | 1+0, 3+2, 5+0, 10+0, 15+10, or unlimited. The increment is added after each move, and running out of time loses. If the opponent cannot possibly checkmate, a timeout is a draw. |
+| Clocks | 10 s hyperbullet (10 seconds each), 1+0, 3+2, 5+0, 10+0, 15+10, or unlimited. The increment is added after each move, and running out of time loses. If the opponent cannot possibly checkmate, a timeout is a draw. |
 | Moves | SAN move list. Click a move, or use ←/→ (Home/End or ↑/↓ jump to the first or last move), to step through the game. |
 | Game end | Checkmate, stalemate, threefold repetition, 50-move rule, insufficient material, timeout, resign (with confirmation), draw offer (accept or decline; the offer lapses if the opponent moves) |
 | PGN / FEN | Copy the PGN of the game or the FEN of the shown position; load a PGN (it becomes an untimed game you can replay or continue) or a FEN (starts a new game from that position) |
@@ -87,7 +87,7 @@ The script streams the file, so very large files are fine, and it reads `.zst` d
 | 7 | 6 | 2 s | none |
 | 8 | up to 20 (as deep as 4 s allows) | 4 s | none |
 
-Each level beat the one below it in `npm run engine:match -- --ladder` (Phase 12). All levels play a forced mate when they see one. The computer accepts a draw offer only when it judges its own position to be at least 1.5 pawns worse.
+Each level beat the one below it in `npm run engine:match -- --ladder` (Phase 12). All levels play a forced mate when they see one. On a clock, the computer never spends more than a thirtieth of its remaining time on a move, and waits less before replying, so it can keep up in bullet and hyperbullet. The computer accepts a draw offer only when it judges its own position to be at least 1.5 pawns worse.
 
 ## Features (Phase 4: Online play)
 
@@ -150,7 +150,7 @@ The pairing engine is in [server/tournament/](server/tournament/). Both formats 
 |---|---|
 | Move animation | Pieces slide to their new square, and the rook slides too when castling. Pieces you drag aren't animated (you already put them there), and nothing animates when you jump around a game or load one. Turned off if your system asks for reduced motion. |
 | Sounds | Moves, captures, checks, game start, game end and a beep when your clock drops under 10 seconds. They're synthesised in the browser with the Web Audio API, so no sound files are shipped. **🔊** in the top bar turns them off, and the choice is remembered. |
-| Premoves | During the opponent's turn (online, or against the computer), drag or click one of your pieces to queue a move: its squares turn orange. It's played the instant your turn comes if it's still legal, and dropped if not. Promotions become a queen. Click elsewhere or right-click to cancel. |
+| Premoves | During the opponent's turn (online, or against the computer), drag or click your pieces to queue up to 10 moves. Their squares turn orange, and the board shows your pieces where the queued moves will put them, so you can plan the next one from there. When your turn comes, the first queued move is played at once if it's still legal. If it isn't, the whole queue is dropped. Promotions become a queen. Click elsewhere or right-click to cancel the queue. |
 | Rematch | After an online game, **↻ Rematch** offers a new game with the same time control and colours swapped. The opponent can accept or decline, and you can withdraw the offer. Tournament games have no rematch. |
 | Install as an app | OpenGambit has a web app manifest, its own icon and a service worker, so browsers offer **Install**. Once installed or visited, playing the computer, puzzles and the analysis board work offline. Online play needs a connection. The service worker is only active in production builds (`npm run build`), never in `npm run dev`. |
 
@@ -458,7 +458,7 @@ src/
     clock.ts      time controls and clock math (time is injected, so tests are deterministic)
     gameEnd.ts    end-of-game detection and result text
     game.ts       game state reducer, plus PGN export/import and FEN validation
-    premove.ts    premove targets and checking a premove when the turn comes
+    premove.ts    premove targets, the queue (up to 10) and how it looks, and checking a premove when the turn comes
   puzzles/runs.ts  Streak and Storm rules: run order, the Storm clock, combo bonuses
     animation.ts  which pieces slide, and which sound a move makes
   analysis/     analysis board logic (pure, unit-tested)
@@ -603,7 +603,7 @@ Chess pieces are drawn with standard Unicode chess symbols in the system font. N
 - **Tournaments are basic.** There's no tournament chat (left out on purpose: it would need moderation), no team battles, no scheduled or recurring events, no private or password-protected tournaments, no editing after creation, and no notifications outside the open tab.
 - **The Swiss pairing is a simplified version of the Dutch system,** not the full FIDE rules. It does keep the main guarantees: no rematches, similar scores, colour balance and fair byes.
 - **Guests are per tab.** Opening a game link in a new tab as a guest makes you a spectator. Signed-in players are the same player in every tab.
-- **No chat, takebacks or extra time** in online games, and only one premove can be queued at a time.
+- **No chat, takebacks or extra time** in online games. Premoves aren't available in bot games (they're untimed).
 - **Offline play needs one visit first.** The service worker saves files as they are used, so the computer opponent works offline only after you have played it once online.
 - **No password reset or email.** A forgotten password can't be recovered, because accounts have no email address. You can change your password while signed in.
 - **Deleting an account during a running game:** that game's result can't be saved afterwards, though the opponent's other games are unaffected.

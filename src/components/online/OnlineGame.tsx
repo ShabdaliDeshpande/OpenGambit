@@ -7,7 +7,7 @@ import { findTimeControl, opposite } from '../../chess/clock';
 import { describeResult } from '../../chess/gameEnd';
 import { useKeyboardNav } from '../../hooks/useKeyboardNav';
 import { useGameEndSound, useLowTimeWarning } from '../../hooks/useGameSounds';
-import { resolvePremove, type Premove } from '../../chess/premove';
+import { MAX_PREMOVES, takePremove, type Premove } from '../../chess/premove';
 import { playSound } from '../../sound/sounds';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import { clockMs, fenAfter, onlinePgn, replay, withPending } from '../../online/view';
@@ -36,7 +36,7 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
   const [viewPly, setViewPly] = useState<number | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [confirmResign, setConfirmResign] = useState(false);
-  const [premove, setPremove] = useState<Premove | null>(null);
+  const [premoves, setPremoves] = useState<Premove[]>([]);
   const [now, setNow] = useState(() => performance.now());
 
   // the server's snapshot replaces the move we sent, whether it was accepted or not
@@ -86,13 +86,13 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
   }, [snap]);
   useLowTimeWarning(snap && you ? clockMs(snap, received!.at, now, you) : null, playing && snap?.clock.running === you);
 
-  // play a queued premove the moment the opponent's move arrives
+  // play the first queued premove the moment the opponent's move arrives; one that no longer works drops the rest
   useEffect(() => {
-    if (!premove || !snap) return;
-    if (snap.status !== 'playing') return setPremove(null);
+    if (!premoves.length || !snap) return;
+    if (snap.status !== 'playing') return setPremoves([]);
     if (you !== turn || pending) return;
-    const move = resolvePremove(fenAfter(records, records.length), premove);
-    setPremove(null);
+    const { move, rest } = takePremove(fenAfter(records, records.length), premoves);
+    setPremoves(rest);
     if (move) onMove(move.from, move.to, move.promotion);
   }, [snap?.moves.length, snap?.status, turn]);
 
@@ -178,9 +178,9 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
           lastMove={lastMove}
           onMove={onMove}
           premoveColor={playing && live && you ? you : null}
-          premove={premove}
-          onPremove={setPremove}
-          onCancelPremove={() => setPremove(null)}
+          premoves={premoves}
+          onPremove={pm => setPremoves(q => (q.length < MAX_PREMOVES ? [...q, pm] : q))}
+          onCancelPremove={() => setPremoves([])}
         />
       </div>
 

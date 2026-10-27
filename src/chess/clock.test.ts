@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createClock, findTimeControl, flaggedColor, formatClock, pressClock, remainingMs, stopClock } from './clock';
+import { createClock, findTimeControl, flaggedColor, formatClock, pressClock, remainingMs, speedOf, stopClock } from './clock';
 import { createGame } from './game';
 import { playSan } from './testUtils';
 
@@ -73,5 +73,13 @@ describe('clock inside a game', () => {
     expect(s.clock?.remaining.b).toBe(178_000);
     expect(s.clock?.remaining.w).toBe(178_000);
     expect(s.clock?.active).toBe('b');
+  });
+});
+
+describe('hyperbullet', () => {
+  it('is ten seconds a side, rated as bullet', () => {
+    const tc = findTimeControl('10s')!;
+    expect(tc).toMatchObject({ initialMs: 10_000, incrementMs: 0, label: '10 s Hyperbullet' });
+    expect(speedOf(tc)).toBe('bullet');
   });
 });

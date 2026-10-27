@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { moveSoundFor, slidesFor } from './animation';
-import { premoveDests, resolvePremove } from './premove';
+import { MAX_PREMOVES, premoveDests, premoveFen, resolvePremove, takePremove } from './premove';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
@@ -25,6 +25,38 @@ describe('premoves', () => {
     expect(resolvePremove(afterE5, { from: 'e4', to: 'e5' })).toBeNull(); // blocked now
     // promotion premoves become a queen
     expect(resolvePremove('8/4P3/8/8/8/8/k7/4K3 w - - 0 1', { from: 'e7', to: 'e8' })).toEqual({ from: 'e7', to: 'e8', promotion: 'q' });
+  });
+});
+
+describe('premove queues', () => {
+  it('shows the queued moves as made: castling takes the rook, a pawn on the last rank is a queen', () => {
+    expect(premoveFen(AFTER_E4, [
+      { from: 'g1', to: 'f3' },
+      { from: 'f1', to: 'c4' },
+      { from: 'e1', to: 'g1' },
+    ])).toBe('rnbqkbnr/pppppppp/8/8/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b - - 0 1');
+    expect(premoveFen('8/4P3/8/8/8/8/k7/4K3 b - - 0 1', [{ from: 'e7', to: 'e8' }])).toBe('4Q3/8/8/8/8/8/k7/4K3 b - - 0 1');
+    // a recapture onto your own piece's square (in case it's taken first)
+    expect(premoveFen(AFTER_E4, [{ from: 'd1', to: 'e2' }])).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPPQPPP/RNB1KBNR b - - 0 1');
+  });
+
+  it('never targets a king’s square, so queued positions stay sound', () => {
+    const dests = premoveDests('4k3/8/8/8/8/8/8/4KQ2 b - - 0 1', 'w');
+    expect(dests.get('f1')).not.toContain('e1');
+    expect(dests.get('f1')).toContain('f8');
+    expect(premoveDests('4k3/8/8/8/8/8/8/4Q1K1 b - - 0 1', 'w').get('e1')).not.toContain('e8');
+  });
+
+  it('plays the first queued move when it works, and drops the queue when it doesn’t', () => {
+    const afterE5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+    const queue = [
+      { from: 'g1', to: 'f3' },
+      { from: 'f1', to: 'c4' },
+    ] as const;
+    expect(takePremove(afterE5, queue)).toEqual({ move: { from: 'g1', to: 'f3' }, rest: [{ from: 'f1', to: 'c4' }] });
+    expect(takePremove(afterE5, [{ from: 'e4', to: 'e5' }, ...queue])).toEqual({ move: null, rest: [] });
+    expect(takePremove(afterE5, [])).toEqual({ move: null, rest: [] });
+    expect(MAX_PREMOVES).toBe(10);
   });
 });
 

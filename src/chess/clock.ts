@@ -8,6 +8,7 @@ export interface TimeControl {
 }
 
 export const TIME_CONTROLS: readonly TimeControl[] = [
+  { id: '10s', label: '10 s Hyperbullet', initialMs: 10_000, incrementMs: 0 },
   { id: '1+0', label: '1+0 Bullet', initialMs: 60_000, incrementMs: 0 },
   { id: '3+2', label: '3+2 Blitz', initialMs: 180_000, incrementMs: 2_000 },
   { id: '5+0', label: '5+0 Blitz', initialMs: 300_000, incrementMs: 0 },

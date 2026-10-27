@@ -46,7 +46,7 @@ export function useEngine() {
   );
 
   const requestMove = useCallback(
-    (req: Omit<MoveRequest, 'id' | 'type'>): Promise<EngineMove | null> => {
+    (req: Omit<MoveRequest, 'id' | 'type'>, minReplyMs = MIN_REPLY_MS): Promise<EngineMove | null> => {
       const id = nextId.current++;
       const started = performance.now();
       const reply = new Promise<EngineMove | null>((resolve, reject) => {
@@ -56,7 +56,7 @@ export function useEngine() {
       return reply.then(
         move =>
           new Promise(resolve =>
-            setTimeout(() => resolve(move), Math.max(0, MIN_REPLY_MS - (performance.now() - started))),
+            setTimeout(() => resolve(move), Math.max(0, minReplyMs - (performance.now() - started))),
           ),
       );
     },

@@ -6,10 +6,11 @@ import { Piece } from './Piece';
 import { PromotionPicker } from './PromotionPicker';
 import { moveSoundFor, slidesFor } from '../chess/animation';
 import { playSound } from '../sound/sounds';
-import { premoveDests, type Premove } from '../chess/premove';
+import { MAX_PREMOVES, premoveDests, premoveFen, type Premove } from '../chess/premove';
 import { BRUSHES, brushFor, toggleShape, type Brush, type Shape } from '../analysis/shapes';
 
 const FILES = 'abcdefgh';
+const NO_PREMOVES: readonly Premove[] = [];
 
 export interface Arrow {
   from: Square;
@@ -30,10 +31,13 @@ export interface BoardProps {
   marks?: Square[];
   /** Squares with a star to collect (lessons). */
   stars?: Square[];
-  /** The side that may queue a premove while it's the other side's turn. */
+  /** The side that may queue premoves while it's the other side's turn. */
   premoveColor?: Color | null;
-  premove?: Premove | null;
+  /** Premoves waiting, oldest first; the board shows them as already made (up to MAX_PREMOVES). */
+  premoves?: readonly Premove[];
+  /** A premove to add to the end of the queue. */
   onPremove?: (pm: Premove) => void;
+  /** Drops the whole queue. */
   onCancelPremove?: () => void;
   /** Arrows and circles drawn by the user (right-click to draw; left click clears). */
   shapes?: Shape[];
@@ -126,7 +130,7 @@ export function Board({
   marks = [],
   stars = [],
   premoveColor = null,
-  premove = null,
+  premoves = NO_PREMOVES,
   onPremove,
   onCancelPremove,
   shapes = [],
@@ -145,6 +149,15 @@ export function Board({
 
   const chess = useMemo(() => new Chess(fen), [fen]);
   const premoving = !!premoveColor && !!onPremove && chess.turn() !== premoveColor && movableColor !== chess.turn();
+  // while premoves wait, the pieces are drawn where they will be
+  const shown = useMemo(() => {
+    if (!premoving || premoves.length === 0) return chess;
+    try {
+      return new Chess(premoveFen(fen, premoves));
+    } catch {
+      return chess;
+    }
+  }, [chess, fen, premoving, premoves]);
 
   // a move played forward sounds, and its piece (and a castling rook) slides from where it was;
   // a piece dropped by hand is already in place
@@ -173,7 +186,8 @@ export function Board({
   const dests = useMemo(() => {
     const map = new Map<Square, { to: Square; capture: boolean; promotion: boolean }[]>();
     if (premoving && premoveColor) {
-      for (const [from, tos] of premoveDests(fen, premoveColor)) map.set(from, tos.map(to => ({ to, capture: false, promotion: false })));
+      if (premoves.length >= MAX_PREMOVES) return map;
+      for (const [from, tos] of premoveDests(shown.fen(), premoveColor)) map.set(from, tos.map(to => ({ to, capture: false, promotion: false })));
       return map;
     }
     if (!movableColor || chess.turn() !== movableColor) return map;
@@ -183,7 +197,7 @@ export function Board({
       map.set(m.from, list);
     }
     return map;
-  }, [chess, fen, movableColor, premoving, premoveColor]);
+  }, [chess, shown, movableColor, premoving, premoveColor, premoves.length]);
 
   const checkSquare = useMemo(() => {
     if (!chess.inCheck()) return null;
@@ -245,8 +259,8 @@ export function Board({
       setDrag({ from: sq, pointerId: e.pointerId, x: hit.x, y: hit.y, moved: false });
     } else {
       setSelected(null);
-      // clicking elsewhere drops a queued premove
-      if (premove) onCancelPremove?.();
+      // clicking elsewhere drops the queued premoves
+      if (premoves.length) onCancelPremove?.();
     }
   };
 
@@ -280,7 +294,7 @@ export function Board({
   const squares = [];
   for (let i = 0; i < 64; i++) {
     const sq = squareAt(i, orientation);
-    const piece = chess.get(sq);
+    const piece = shown.get(sq);
     const row = Math.floor(i / 8);
     const col = i % 8;
     const light = (row + col) % 2 === 0;
@@ -290,7 +304,7 @@ export function Board({
     if (selected === sq) classes.push('selected');
     if (checkSquare === sq) classes.push('check');
     if (marks.includes(sq)) classes.push('marked');
-    if (premove && (premove.from === sq || premove.to === sq)) classes.push('premove');
+    if (premoving && premoves.some(pm => pm.from === sq || pm.to === sq)) classes.push('premove');
     if (dest) classes.push(dest.capture ? 'dest-capture' : 'dest');
     const dragging = drag?.moved && drag.from === sq;
     squares.push(
@@ -315,7 +329,7 @@ export function Board({
     );
   }
 
-  const dragPiece = drag?.moved ? chess.get(drag.from) : undefined;
+  const dragPiece = drag?.moved ? shown.get(drag.from) : undefined;
 
   return (
     <div
@@ -331,8 +345,8 @@ export function Board({
       onContextMenu={e => {
         // the right button draws on boards that allow it
         if (onShapes) e.preventDefault();
-        // right-click cancels a premove
-        if (premove || selected) {
+        // right-click cancels the premoves
+        if (premoves.length || selected) {
           e.preventDefault();
           setSelected(null);
           onCancelPremove?.();

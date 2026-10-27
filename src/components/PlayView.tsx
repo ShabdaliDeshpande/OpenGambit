@@ -21,7 +21,7 @@ import {
   type GameSetup,
 } from '../chess/game';
 import { describeResult } from '../chess/gameEnd';
-import { acceptsDraw } from '../engine/search';
+import { acceptsDraw, levelSettings } from '../engine/search';
 import { useEngine } from '../hooks/useEngine';
 import { bookApplies } from '../explorer/book';
 import { fetchBookMove } from '../explorer/fetchBookMove';
@@ -31,7 +31,7 @@ import { isStandardStart } from '../explorer/key';
 const BOOK_REPLY_MS = 400;
 import { useKeyboardNav } from '../hooks/useKeyboardNav';
 import { useGameEndSound, useLowTimeWarning } from '../hooks/useGameSounds';
-import { resolvePremove, type Premove } from '../chess/premove';
+import { MAX_PREMOVES, takePremove, type Premove } from '../chess/premove';
 import { playSound } from '../sound/sounds';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
@@ -52,7 +52,7 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
   const [game, dispatch] = useReducer(gameReducer, DEFAULT_SETUP, s => createGame(s));
   const [now, setNow] = useState(() => performance.now());
   const [notice, setNotice] = useState<string | null>(null);
-  const [premove, setPremove] = useState<Premove | null>(null);
+  const [premoves, setPremoves] = useState<Premove[]>([]);
   const engine = useEngine();
 
   const { setup } = game;
@@ -76,17 +76,26 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
   useEffect(() => {
     if (!engineColor || game.result || turn !== engineColor) return;
     let cancelled = false;
+    // on a clock the computer never thinks (or waits) longer than its time allows: at most a thirtieth of what's left
+    const left = game.clock ? remainingMs(game.clock, engineColor, performance.now()) : null;
+    const level = levelSettings(setup.level);
+    const settings = left === null ? null : { ...level, maxMs: Math.max(40, Math.min(level.maxMs, left / 30)) };
+    const replyMs = left === null ? undefined : Math.min(350, left / 60);
     // early on, the computer plays master moves from the server's opening book when it has one
     const fromBook = bookApplies(setup.level, game.moves.length, isStandardStart(game.startFen)) ? fetchBookMove(live) : Promise.resolve(null);
     fromBook
       .then(book =>
         book
-          ? new Promise<typeof book>(resolve => setTimeout(() => resolve(book), BOOK_REPLY_MS))
-          : engine.requestMove({
-              startFen: game.startFen,
-              moves: game.moves.map(m => ({ from: m.from, to: m.to, ...(m.promotion ? { promotion: m.promotion } : {}) })),
-              level: setup.level,
-            }),
+          ? new Promise<typeof book>(resolve => setTimeout(() => resolve(book), Math.min(BOOK_REPLY_MS, replyMs ?? BOOK_REPLY_MS)))
+          : engine.requestMove(
+              {
+                startFen: game.startFen,
+                moves: game.moves.map(m => ({ from: m.from, to: m.to, ...(m.promotion ? { promotion: m.promotion } : {}) })),
+                level: setup.level,
+                ...(settings ? { settings } : {}),
+              },
+              replyMs,
+            ),
       )
       .then(m => {
         if (cancelled || !m) return;
@@ -105,7 +114,7 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
       dispatch({ type: 'new', setup: s, ...(startFen ? { startFen } : {}) });
       setOrientation(s.mode === 'computer' ? s.humanColor : 'w');
       setNotice(null);
-      setPremove(null);
+      setPremoves([]);
       setNow(performance.now());
       playSound('start');
     },
@@ -120,13 +129,13 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
   const watchedClock = setup.mode === 'computer' ? setup.humanColor : turn;
   useLowTimeWarning(game.clock ? remainingMs(game.clock, watchedClock, now) : null, clockRunning && turn === watchedClock);
 
-  // a premove queued during the computer's turn is played as soon as the turn comes back
+  // queued premoves are played one at a time, each as soon as the turn comes back; one that no longer works drops the rest
   useEffect(() => {
-    if (!premove || !engineColor) return;
-    if (game.result) return setPremove(null);
+    if (!premoves.length || !engineColor) return;
+    if (game.result) return setPremoves([]);
     if (turn === engineColor) return;
-    const move = resolvePremove(live, premove);
-    setPremove(null);
+    const { move, rest } = takePremove(live, premoves);
+    setPremoves(rest);
     if (move) dispatch({ type: 'move', from: move.from, to: move.to, ...(move.promotion ? { promotion: move.promotion } : {}), now: performance.now() });
   }, [game.moves.length, game.result, turn]);
 
@@ -195,9 +204,9 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
           lastMove={lastMove}
           onMove={onMove}
           premoveColor={engineColor && !game.result && viewingLive ? setup.humanColor : null}
-          premove={premove}
-          onPremove={setPremove}
-          onCancelPremove={() => setPremove(null)}
+          premoves={premoves}
+          onPremove={pm => setPremoves(q => (q.length < MAX_PREMOVES ? [...q, pm] : q))}
+          onCancelPremove={() => setPremoves([])}
         />
       </div>
 
