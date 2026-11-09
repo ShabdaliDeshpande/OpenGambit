@@ -6,3 +6,5 @@ data
 public/puzzles/imported.json
 .git
 *.log
+# the Android app is built separately (npm run android:apk); never send its build output or signing keys
+android

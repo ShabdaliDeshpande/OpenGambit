@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { matchSystemBars } from '../native/androidShell';
 
 export type Theme = 'light' | 'dark';
 const KEY = 'chess-app:theme';
@@ -18,6 +19,7 @@ export function useTheme() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    matchSystemBars(theme);
     try {
       localStorage.setItem(KEY, theme);
     } catch {

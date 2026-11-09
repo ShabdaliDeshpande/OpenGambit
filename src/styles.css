@@ -73,8 +73,10 @@ button {
   padding: 6px 12px;
 }
 
-button:hover:not(:disabled) {
-  border-color: var(--accent);
+@media (hover: hover) {
+  button:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
 }
 
 button:disabled {
@@ -111,6 +113,14 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 8px;
+}
+
+/* radio buttons and checkboxes keep their own size (full width squeezed their labels) */
+input[type='radio'],
+input[type='checkbox'] {
+  width: auto;
+  padding: 0;
+  flex: none;
 }
 
 textarea {
@@ -830,8 +840,10 @@ button.analyse-game {
   padding: 0 2px;
 }
 
-.pv-move:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .pv-move:hover {
+    background: var(--surface-2);
+  }
 }
 
 .tree {
@@ -932,19 +944,53 @@ button.analyse-game {
   color: var(--accent-text);
 }
 
+/* phones: the actions stay on one line next to the title, and the screens are a 3 × 2 grid,
+   so nothing moves when you switch screens (the flip button comes and goes) */
+.narrow-only {
+  display: none;
+}
+
 @media (max-width: 600px) {
+  .wide-only {
+    display: none;
+  }
+  .narrow-only {
+    display: inline;
+  }
   .topbar {
     flex-wrap: wrap;
     row-gap: 8px;
+    gap: 8px;
+  }
+  .topbar h1 {
+    font-size: 16px;
+    white-space: nowrap;
+  }
+  /* signed in there are more buttons: the title makes room */
+  .topbar.signed-in h1 {
+    display: none;
+  }
+  .topbar > .row {
+    margin-left: auto;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .topbar > .row button {
+    padding: 6px 10px;
   }
   .tabs {
     order: 3;
     width: 100%;
     margin: 0;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
   }
   .tabs button {
-    flex: 1 1 auto;
+    padding: 6px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -1331,11 +1377,13 @@ p button.link-button {
   cursor: pointer;
 }
 
-.player button.link-button:hover,
-.seek-table button.link-button:hover,
-.history button.link-button:hover,
-p button.link-button:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .player button.link-button:hover,
+  .seek-table button.link-button:hover,
+  .history button.link-button:hover,
+  p button.link-button:hover {
+    text-decoration: underline;
+  }
 }
 
 /* ---------- tournaments ---------- */
@@ -1387,8 +1435,10 @@ button.tour-row {
   cursor: pointer;
 }
 
-button.tour-row:hover {
-  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+@media (hover: hover) {
+  button.tour-row:hover {
+    background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  }
 }
 
 .tour-row .muted {
@@ -2795,8 +2845,10 @@ button.daily-button {
   color: var(--text);
 }
 
-.bot-card:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .bot-card:hover {
+    border-color: var(--accent);
+  }
 }
 
 .bot-card.on {
@@ -3067,8 +3119,10 @@ button.daily-button {
   font-weight: 600;
 }
 
-.bell-panel li button:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .bell-panel li button:hover {
+    background: var(--surface-2);
+  }
 }
 
 .account-settings label.check,
@@ -3087,4 +3141,106 @@ button.daily-button {
 
 .daily .row + .daily-form {
   margin-top: 16px;
+}
+
+/* ---------- the Android app ---------- */
+
+/* the app draws under the status and navigation bars (edge to edge): keep content clear of them.
+   Capacitor sets --safe-area-inset-*; env() covers browsers on phones with a notch */
+:root {
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
+.app {
+  padding-top: calc(12px + var(--safe-top));
+  padding-right: calc(16px + var(--safe-right));
+  padding-bottom: calc(32px + var(--safe-bottom));
+  padding-left: calc(16px + var(--safe-left));
+}
+
+/* solid strips behind the system bars, so scrolled content doesn't show through them */
+html.native-app body::before,
+html.native-app body::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--bg);
+  pointer-events: none;
+}
+
+html.native-app body::before {
+  top: 0;
+  height: var(--safe-top);
+}
+
+html.native-app body::after {
+  bottom: 0;
+  height: var(--safe-bottom);
+}
+
+html.native-app {
+  -webkit-tap-highlight-color: transparent;
+  /* no rubber-band glow at the ends of the page */
+  overscroll-behavior: none;
+}
+
+/* buttons and the board don't select text or open the long-press menu */
+html.native-app button,
+html.native-app nav,
+html.native-app .board {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.server-line {
+  margin-top: 16px;
+}
+
+/* phones held sideways: one short header line, and the board sized to the screen's height
+   with the moves and controls beside it */
+@media (max-height: 520px) and (orientation: landscape) {
+  .wide-only {
+    display: none;
+  }
+  .narrow-only {
+    display: inline;
+  }
+  .app {
+    padding-top: calc(6px + var(--safe-top));
+  }
+  .topbar {
+    margin-bottom: 8px;
+    gap: 6px 8px;
+    flex-wrap: wrap;
+  }
+  .topbar h1 {
+    display: none;
+  }
+  .tabs {
+    margin-left: 0;
+    gap: 2px;
+    flex-wrap: nowrap;
+  }
+  .tabs button,
+  .topbar > .row button {
+    padding: 5px 9px;
+    white-space: nowrap;
+  }
+  .topbar > .row {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 340px);
+    gap: 14px;
+  }
+  .board-wrap {
+    width: min(100%, calc(100dvh - 62px - var(--safe-top) - var(--safe-bottom)));
+  }
 }

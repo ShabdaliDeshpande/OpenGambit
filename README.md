@@ -448,7 +448,47 @@ The app is one Node process that serves the built files, the account API and the
 Things to know about hosting it:
 - Running games live in memory. A restart or redeploy ends them. Accounts, ratings and finished games are kept in the database.
 - Render's free plan stops the service after about 15 minutes without visitors, and the next visit takes a while to start it again.
-- The server accepts WebSocket connections and changes only from pages on its own host. It limits sockets per address, messages per connection, logins and sign-ups. It has no moderation.
+- The server accepts WebSocket connections and changes only from pages on its own host, and from the Android app (below). It limits sockets per address, messages per connection, logins and sign-ups. It has no moderation.
+
+## Android app
+
+The same app is packaged as an Android APK with [Capacitor](https://capacitorjs.com): the built files from `dist/` run in the phone's WebView, from `https://localhost` inside the APK. Android 7.0 (API 24) or newer.
+
+**Works with no server:** two players on one phone, the computer, bots, puzzles (built-in, Streak and Storm), lessons, drills, endgames and the analysis board with its engine.
+**Needs a server:** online play, accounts and ratings, tournaments, daily chess, leaderboards, profiles and the opening explorer. The **Online** tab (or **Sign in**) asks for the server's `https://` address the first time, for example your Render address; *Change* under the Online tab switches it later. To build the address in, set `VITE_SERVER_URL=https://your-server.example` when building.
+
+How it differs from the website:
+- The app signs in with a session token that it keeps in its storage and sends as `Authorization: Bearer` (and as a WebSocket subprotocol), instead of the HttpOnly cookie. The server lets pages from `https://localhost` and `capacitor://localhost` call it across origins (CORS) and ignores cookies on their requests, so a request from those origins can't act for anyone by itself. `APP_ORIGINS` (comma-separated) replaces that list; `APP_ORIGINS=` turns app access off.
+- Android's back button closes a dialog or pop-up, then goes back a screen, then back to Play, and finally sends the app to the background (a running game keeps going).
+- The page draws edge to edge and keeps clear of the status and navigation bars; their icons follow the light or dark theme.
+- No service worker: the files are already on the phone.
+
+### Building the APK
+
+Requirements: Node.js 22+, JDK 21 and the Android SDK (`platforms;android-36`, `build-tools;35.0.0`), with `ANDROID_HOME` set or `sdk.dir` in `android/local.properties`.
+
+```sh
+npm run android:apk      # build the web app, copy it into android/, and build a release APK
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`. `npm run android:sync` only rebuilds and copies the web app (for Android Studio: open the `android/` folder).
+
+**Signing.** A release APK is signed with the key named in `android/keystore.properties`:
+
+```properties
+storeFile=opengambit-release.jks
+storePassword=…
+keyAlias=opengambit
+keyPassword=…
+```
+
+Neither file is committed (`android/.gitignore`). Keep both safe: Android only installs an update over the app if it's signed with the same key. Without `keystore.properties` the release APK is unsigned; `cd android && ./gradlew assembleDebug` makes a debug-signed one for testing. To make a new key:
+
+```sh
+keytool -genkeypair -keystore android/opengambit-release.jks -alias opengambit -keyalg RSA -keysize 3072 -validity 10000
+```
+
+The version shown on the phone is `version` from `package.json`; raise `versionCode` in `android/app/build.gradle` for every APK you hand out as an update.
 
 ## Project layout
 
@@ -490,6 +530,8 @@ src/
     analysis/     AnalysisView, EvalBar, EngineLines, TreeView, NodeTools, ReviewPanel, EvalGraph, ExplorerPanel
   hooks/        useEngine, useAnalysis, useKeyboardNav, useTheme, useOnline, useAccount, useGameSounds
   sound/sounds.ts  synthesised game sounds (Web Audio) and the on/off setting
+  net/server.ts  where the API and game server are: the page's own address on the website, a chosen https server in the Android app (with its session token)
+  native/androidShell.ts  the Android app's back button and system bar colours
   explorer/     key.ts (position keys shared with the server), book.ts (the computer's opening book),
                 format.ts (result percentages), fetchBookMove.ts
   online/       client side of online play
@@ -537,6 +579,7 @@ server/         the server (Node, run directly from TypeScript)
   config.ts     timeouts and limits
 scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a running server
 public/         manifest.webmanifest, icons/, sw.js (service worker for install and offline play)
+android/        the Android project (Capacitor); capacitor.config.ts configures it. npm run android:apk builds the APK
 scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
 scripts/smoke-puzzles.ts  end-to-end check of puzzle ratings, the dashboard and the daily puzzle
 scripts/smoke-account-settings.ts  end-to-end check of password change, leaderboard and account deletion
@@ -570,6 +613,10 @@ This project has no GPL or AGPL dependencies.
 | pg (server only, PostgreSQL client) | 8.16.3 | MIT |
 | pg's dependencies (server only) | pg-pool 3.14.0, pg-protocol 1.16.1, pg-types 2.2.0, pg-connection-string 2.14.1, pgpass 1.0.5, pg-cloudflare 1.4.1, postgres-array 2.0.0, postgres-bytea 1.0.1, postgres-date 1.0.7, postgres-interval 1.2.0, xtend 4.0.2 | MIT |
 | pg's dependencies (server only) | pg-int8 1.0.1, split2 4.2.0 | ISC |
+| @capacitor/core (the Android app's bridge) | 8.6.0 | MIT |
+| @capacitor/android (Android app only) | 8.6.0 | MIT |
+| @capacitor/app (Android app only: back button) | 8.1.2 | MIT |
+| AndroidX libraries in the APK (appcompat, core, splashscreen, webkit, …) | see android/variables.gradle | Apache-2.0 |
 
 SQLite comes from Node's built-in `node:sqlite` module, so no extra package is needed for it.
 
@@ -586,6 +633,7 @@ SQLite comes from Node's built-in `node:sqlite` module, so no extra package is n
 | @types/ws | 8.18.1 | MIT |
 | @types/node | 24.10.1 | MIT |
 | @types/pg | 8.15.5 | MIT |
+| @capacitor/cli | 8.6.0 | MIT |
 
 Transitive development packages:
 

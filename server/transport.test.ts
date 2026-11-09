@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, expect, it } from 'vitest';
 import { WebSocket as NodeWs } from 'ws';
 import type { ClientMessage, ServerMessage } from '../src/online/protocol.ts';
-import { attachGameServer, sameOrigin } from './transport.ts';
+import { appOriginsFrom, attachGameServer, bearerToken, fromApp, sameOrigin } from './transport.ts';
 
 let server: Server | null = null;
 
@@ -159,4 +159,54 @@ it('compares the Origin host with the Host header', () => {
   expect(sameOrigin(req('https://evil.example', 'chess.example'))).toBe(false);
   expect(sameOrigin(req('not a url', 'chess.example'))).toBe(false);
   expect(sameOrigin(req(undefined, 'chess.example'))).toBe(true);
+});
+
+it('lets the Android app connect from its origin and sign in with a token subprotocol', async () => {
+  const token = 'a'.repeat(43);
+  const seen: (string | undefined)[] = [];
+  server = createServer((_req, res) => res.end('ok'));
+  attachGameServer(
+    server,
+    {},
+    {
+      identify: async req => {
+        seen.push(bearerToken(req));
+        return null;
+      },
+    },
+  );
+  await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve));
+  const url = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/ws`;
+  const attempt = (origin: string, protocols?: string[]) =>
+    new Promise<{ ok: boolean; protocol: string }>(resolve => {
+      const ws = new NodeWs(url, protocols, { origin });
+      ws.on('open', () => {
+        resolve({ ok: true, protocol: ws.protocol });
+        ws.close();
+      });
+      ws.on('error', () => resolve({ ok: false, protocol: '' }));
+    });
+
+  expect(await attempt('https://localhost', ['opengambit', `bearer.${token}`])).toEqual({ ok: true, protocol: 'opengambit' });
+  expect(await attempt('https://localhost', ['opengambit'])).toEqual({ ok: true, protocol: 'opengambit' });
+  expect((await attempt('https://evil.example', ['opengambit'])).ok).toBe(false);
+  expect(seen).toEqual([token, undefined]);
+});
+
+it('recognises app requests and their tokens', () => {
+  const req = (headers: Record<string, string>) => ({ headers: { host: 'chess.example', ...headers } }) as unknown as IncomingMessage;
+  const apps = appOriginsFrom({});
+  expect(fromApp(req({ origin: 'https://localhost' }), apps)).toBe(true);
+  expect(fromApp(req({ origin: 'capacitor://localhost' }), apps)).toBe(true);
+  expect(fromApp(req({ origin: 'https://chess.example' }), apps)).toBe(false);
+  expect(fromApp(req({}), apps)).toBe(false);
+  expect(fromApp(req({ origin: 'https://localhost' }), appOriginsFrom({ APP_ORIGINS: '' }))).toBe(false);
+  expect(appOriginsFrom({ APP_ORIGINS: ' https://a.example , https://b.example ' })).toEqual(['https://a.example', 'https://b.example']);
+
+  const t = 'Zx_-'.repeat(10);
+  expect(bearerToken(req({ authorization: `Bearer ${t}` }))).toBe(t);
+  expect(bearerToken(req({ authorization: 'Bearer short' }))).toBeUndefined();
+  expect(bearerToken(req({ authorization: `Basic ${t}` }))).toBeUndefined();
+  expect(bearerToken(req({ 'sec-websocket-protocol': `opengambit, bearer.${t}` }))).toBe(t);
+  expect(bearerToken(req({ 'sec-websocket-protocol': 'opengambit' }))).toBeUndefined();
 });

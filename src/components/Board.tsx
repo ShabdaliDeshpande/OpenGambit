@@ -137,6 +137,8 @@ export function Board({
   onShapes,
 }: BoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
+  /** How the last press was made: a long press with a finger also fires contextmenu, which isn't a right-click. */
+  const lastPointerType = useRef<string>('mouse');
   const [selected, setSelected] = useState<Square | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [promotion, setPromotion] = useState<{ from: Square; to: Square } | null>(null);
@@ -237,6 +239,7 @@ export function Board({
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    lastPointerType.current = e.pointerType;
     if (e.button === 2 && onShapes && !promotion) {
       const hit = pointToSquare(e.clientX, e.clientY);
       if (!hit?.square) return;
@@ -343,6 +346,12 @@ export function Board({
         setDrawing(null);
       }}
       onContextMenu={e => {
+        // a long press on a touch screen: no menu, and the piece stays picked up (premoves stay queued)
+        const pointerType = (e.nativeEvent as PointerEvent).pointerType || lastPointerType.current;
+        if (pointerType === 'touch' || pointerType === 'pen') {
+          e.preventDefault();
+          return;
+        }
         // the right button draws on boards that allow it
         if (onShapes) e.preventDefault();
         // right-click cancels the premoves

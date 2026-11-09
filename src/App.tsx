@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { Color } from 'chess.js';
 import { PlayView } from './components/PlayView';
 import { AnalysisView } from './components/analysis/AnalysisView';
@@ -14,6 +14,7 @@ import type { GameSetup } from './chess/game';
 import { useAccount } from './hooks/useAccount';
 import { useTheme } from './hooks/useTheme';
 import { useSoundSetting } from './hooks/useGameSounds';
+import { listenForBackButton } from './native/androidShell';
 
 // loaded when their tab is first opened, to keep the first download small
 const LearnView = lazy(() => import('./components/learn/LearnView').then(m => ({ default: m.LearnView })));
@@ -23,6 +24,8 @@ type Tab = 'play' | 'online' | 'bots' | 'puzzles' | 'learn' | 'analysis' | 'prof
 
 const TABS = ['play', 'online', 'bots', 'puzzles', 'learn', 'analysis'] as const;
 const TAB_LABEL: Record<(typeof TABS)[number], string> = { play: 'Play', online: 'Play online', bots: 'Bots', puzzles: 'Puzzles', learn: 'Learn', analysis: 'Analysis board' };
+/** Shorter tab names for narrow screens. */
+const TAB_SHORT: Partial<Record<(typeof TABS)[number], string>> = { online: 'Online', analysis: 'Analysis' };
 
 const USERNAME = /^[A-Za-z0-9][A-Za-z0-9_-]{2,19}$/;
 
@@ -91,6 +94,11 @@ export default function App() {
     setTab(t);
   };
 
+  // Android's back button (in the app): see handleBackButton
+  const backState = useRef<{ onHomeTab: boolean; goHome: () => void }>({ onHomeTab: true, goHome: () => undefined });
+  backState.current = { onHomeTab: tab === 'play', goHome: () => chooseTab('play') };
+  useEffect(() => listenForBackButton(() => backState.current), []);
+
   useEffect(() => {
     const onPop = () => {
       const insights = linkedInsights();
@@ -112,19 +120,26 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
+      <header className={me ? 'topbar signed-in' : 'topbar'}>
         <h1>OpenGambit</h1>
         <nav className="tabs" role="tablist" aria-label="Screens">
           {TABS.map(t => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => chooseTab(t)}>
-              {TAB_LABEL[t]}
+              {TAB_SHORT[t] ? (
+                <>
+                  <span className="wide-only">{TAB_LABEL[t]}</span>
+                  <span className="narrow-only">{TAB_SHORT[t]}</span>
+                </>
+              ) : (
+                TAB_LABEL[t]
+              )}
             </button>
           ))}
         </nav>
         <div className="row">
           {(tab === 'play' || tab === 'analysis') && (
-            <button type="button" onClick={flip} title="Flip board (f)">
-              ⇅ Flip
+            <button type="button" onClick={flip} title="Flip board (f)" aria-label="Flip board">
+              ⇅<span className="wide-only"> Flip</span>
             </button>
           )}
           <button
@@ -136,8 +151,9 @@ export default function App() {
           >
             {soundOn ? '🔊' : '🔇'}
           </button>
-          <button type="button" onClick={toggleTheme} title="Toggle theme">
-            {theme === 'dark' ? '☀ Light' : '☾ Dark'}
+          <button type="button" onClick={toggleTheme} title="Toggle theme" aria-label={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
+            {theme === 'dark' ? '☀' : '☾'}
+            <span className="wide-only">{theme === 'dark' ? ' Light' : ' Dark'}</span>
           </button>
           {account.me === undefined ? null : me ? (
             <>
@@ -147,8 +163,10 @@ export default function App() {
                 className={tab === 'profile' && profileName?.toLowerCase() === me.username.toLowerCase() ? 'on account-button' : 'account-button'}
                 onClick={() => openProfile(me.username)}
                 title="Your profile"
+                aria-label={`Your profile (${me.username})`}
               >
-                {me.flair ?? '👤'} {me.username}
+                {me.flair ?? '👤'}
+                <span className="wide-only"> {me.username}</span>
               </button>
               <button type="button" onClick={() => void account.signOut()}>
                 Sign out

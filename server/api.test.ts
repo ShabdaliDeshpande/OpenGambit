@@ -92,6 +92,62 @@ describe('account API', () => {
     expect(await (await get('/api/me', cookie)).json()).toEqual({ user: null });
   });
 
+  it('lets the Android app sign in with a token from its own origin, without cookies', async () => {
+    const app = 'https://localhost';
+    const preflight = await fetch(base + '/api/me', {
+      method: 'OPTIONS',
+      headers: { origin: app, 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization' },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe(app);
+    expect(preflight.headers.get('access-control-allow-headers')).toContain('authorization');
+    expect(preflight.headers.get('access-control-allow-credentials')).toBeNull();
+
+    const res = await post('/api/signup', { username: 'Droid', password: 'robot-arm' }, { origin: app });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe(app);
+    expect(res.headers.get('set-cookie')).toBeNull();
+    const { user, token } = (await res.json()) as { user: { username: string }; token: string };
+    expect(user.username).toBe('Droid');
+    expect(token).toMatch(/^[\w-]{40,}$/);
+
+    const meWith = async (headers: Record<string, string>) =>
+      ((await (await fetch(base + '/api/me', { headers })).json()) as { user: { username: string } | null }).user?.username ?? null;
+    expect(await meWith({ origin: app, authorization: `Bearer ${token}` })).toBe('Droid');
+    expect(await meWith({ origin: app })).toBeNull();
+    // a cookie means nothing on a request from the app's origin
+    expect(await meWith({ origin: app, cookie: `ocb_session=${token}` })).toBeNull();
+
+    const login = await post('/api/login', { username: 'droid', password: 'robot-arm' }, { origin: app });
+    const second = ((await login.json()) as { token: string }).token;
+    expect(second).not.toBe(token);
+
+    const out = await post('/api/logout', {}, { origin: app, authorization: `Bearer ${token}` });
+    expect(out.status).toBe(200);
+    expect(await meWith({ origin: app, authorization: `Bearer ${token}` })).toBeNull();
+    expect(await meWith({ origin: app, authorization: `Bearer ${second}` })).toBe('Droid');
+
+    // other origins still get nothing: no CORS headers, and writes are refused
+    const other = await fetch(base + '/api/me', { headers: { origin: 'https://evil.example' } });
+    expect(other.headers.get('access-control-allow-origin')).toBeNull();
+    expect((await post('/api/login', { username: 'droid', password: 'robot-arm' }, { origin: 'https://evil.example' })).status).toBe(403);
+  });
+
+  it('turns app access off with an empty origin list', async () => {
+    const { handler } = createApi(store, { appOrigins: [] });
+    const strict = createServer((req, res) => handler(req, res));
+    await new Promise<void>(resolve => strict.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${(strict.address() as AddressInfo).port}`;
+    const res = await fetch(url + '/api/signup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://localhost' },
+      body: JSON.stringify({ username: 'Nope', password: 'password1' }),
+    });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    await new Promise(resolve => strict.close(resolve));
+  });
+
   it('rejects bad sign-ups and taken names', async () => {
     expect((await post('/api/signup', { username: 'x', password: 'whatever1' })).status).toBe(400);
     expect((await post('/api/signup', { username: 'Grace', password: 'short' })).status).toBe(400);

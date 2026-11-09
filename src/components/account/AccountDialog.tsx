@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { isNativeApp } from '../../net/server';
+import { useServer } from '../../hooks/useServer';
+import { ServerLine, ServerSetup } from '../online/ServerSetup';
 
 interface Props {
   open: boolean;
@@ -14,6 +17,9 @@ export function AccountDialog({ open, onClose, signIn }: Props) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // the Android app signs in to the server it's set up for, so it may need one first
+  const server = useServer();
+  const [changingServer, setChangingServer] = useState(false);
 
   useEffect(() => {
     const d = ref.current;
@@ -21,6 +27,7 @@ export function AccountDialog({ open, onClose, signIn }: Props) {
     if (open && !d.open) {
       setError(null);
       setPassword('');
+      setChangingServer(false);
       d.showModal();
     } else if (!open && d.open) d.close();
   }, [open]);
@@ -42,69 +49,77 @@ export function AccountDialog({ open, onClose, signIn }: Props) {
 
   return (
     <dialog ref={ref} className="account-dialog" onClose={onClose} aria-labelledby="account-title">
-      <form onSubmit={submit}>
-        <h2 id="account-title">{create ? 'Create an account' : 'Sign in'}</h2>
-        <p className="muted">
-          {create
-            ? 'An account lets you play rated games, keeps your ratings and saves your game history.'
-            : 'Sign in to play rated games and keep your history.'}
-        </p>
-        <label className="field">
-          <span>Username</span>
-          <input
-            name="username"
-            autoComplete="username"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
-            minLength={3}
-            maxLength={20}
-            pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,19}"
-            title="3–20 characters: letters, digits, _ or -"
-            autoFocus
-          />
-        </label>
-        <label className="field">
-          <span>Password</span>
-          <input
-            name="password"
-            type="password"
-            autoComplete={create ? 'new-password' : 'current-password'}
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            minLength={create ? 8 : 1}
-            maxLength={128}
-          />
-        </label>
-        {create && <p className="muted small">At least 8 characters. There is no password reset yet, so keep it somewhere safe.</p>}
-        {error && (
-          <p className="error" role="alert">
-            {error}
+      {isNativeApp && (server === null || changingServer) ? (
+        <ServerSetup onDone={() => setChangingServer(false)} onCancel={server === null ? onClose : () => setChangingServer(false)} />
+      ) : (
+        <form onSubmit={submit}>
+          <h2 id="account-title">{create ? 'Create an account' : 'Sign in'}</h2>
+          <p className="muted">
+            {create
+              ? 'An account lets you play rated games, keeps your ratings and saves your game history.'
+              : 'Sign in to play rated games and keep your history.'}
           </p>
-        )}
-        <div className="row dialog-actions">
-          <button type="submit" className="primary" disabled={busy}>
-            {busy ? 'Please wait…' : create ? 'Create account' : 'Sign in'}
-          </button>
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
-        <p className="muted small">
-          {create ? 'Already have an account? ' : 'New here? '}
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              setCreate(c => !c);
-              setError(null);
-            }}
-          >
-            {create ? 'Sign in' : 'Create an account'}
-          </button>
-        </p>
-      </form>
+          <label className="field">
+            <span>Username</span>
+            <input
+              name="username"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+              minLength={3}
+              maxLength={20}
+              pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,19}"
+              title="3–20 characters: letters, digits, _ or -"
+              autoFocus
+            />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input
+              name="password"
+              type="password"
+              autoComplete={create ? 'new-password' : 'current-password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              minLength={create ? 8 : 1}
+              maxLength={128}
+            />
+          </label>
+          {create && <p className="muted small">At least 8 characters. There is no password reset yet, so keep it somewhere safe.</p>}
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="row dialog-actions">
+            <button type="submit" className="primary" disabled={busy}>
+              {busy ? 'Please wait…' : create ? 'Create account' : 'Sign in'}
+            </button>
+            <button type="button" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+          <p className="muted small">
+            {create ? 'Already have an account? ' : 'New here? '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setCreate(c => !c);
+                setError(null);
+              }}
+            >
+              {create ? 'Sign in' : 'Create an account'}
+            </button>
+          </p>
+          {isNativeApp && <ServerLine onChange={() => setChangingServer(true)} />}
+        </form>
+      )}
     </dialog>
   );
 }
