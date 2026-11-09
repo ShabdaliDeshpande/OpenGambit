@@ -135,7 +135,7 @@ export function Lobby({ client, state, signedIn, myRatings, onPlayComputer, onSi
                 client?.send({ t: 'seek', tc: tc.id, color, rated, range });
               }}>
               <strong>{tc.id}</strong>
-              <span>{tc.label.split(' ')[1]}</span>
+              <span>{tc.label.split(' ').at(-1)}</span>
             </button>
           ))}
         </div>

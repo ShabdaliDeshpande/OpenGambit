@@ -11,6 +11,9 @@ import { Tournaments } from './Tournaments';
 import { DailyHome } from '../daily/DailyHome';
 import { DailyGame } from '../daily/DailyGame';
 import { DailyTourPage } from '../daily/DailyTourPage';
+import { ServerLine, ServerSetup } from './ServerSetup';
+import { isNativeApp } from '../../net/server';
+import { useServer } from '../../hooks/useServer';
 
 const ID = /^[A-Za-z0-9]{1,16}$/;
 
@@ -75,7 +78,21 @@ interface Props {
   onAnalyse: (pgn: string, game?: AnalysedGame) => void;
 }
 
-export function OnlineView({ active, signedIn, meId, myRatings, onPlayComputer, onSignIn, onOpenProfile, onAnalyse }: Props) {
+export function OnlineView(props: Props) {
+  // the Android app needs a server address before anything here can work
+  const server = useServer();
+  const [changing, setChanging] = useState(false);
+  if (isNativeApp && (server === null || changing))
+    return <ServerSetup onDone={() => setChanging(false)} {...(server !== null ? { onCancel: () => setChanging(false) } : {})} />;
+  return (
+    <>
+      <OnlineScreens {...props} />
+      {isNativeApp && <ServerLine onChange={() => setChanging(true)} />}
+    </>
+  );
+}
+
+function OnlineScreens({ active, signedIn, meId, myRatings, onPlayComputer, onSignIn, onOpenProfile, onAnalyse }: Props) {
   const [screen, setScreen] = useState<Screen>(screenFromUrl);
   const { client, state } = useOnline(active || screen.kind !== 'lobby');
   const seenStarted = useRef(0);

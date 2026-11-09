@@ -4,7 +4,7 @@ import { createApi } from './api.ts';
 import { openDatabase } from './db/db.ts';
 import { Store } from './store.ts';
 import { DailyService } from './daily/daily.ts';
-import { attachGameServer } from './transport.ts';
+import { appOriginsFrom, attachGameServer } from './transport.ts';
 
 export interface Backend {
   store: Store;
@@ -24,6 +24,8 @@ export async function startBackend(env: Record<string, string | undefined> = pro
   const store = new Store(db);
   await store.pruneSessions();
   const trustProxy = env.TRUST_PROXY === '1';
+  // the Android app's pages (https://localhost); APP_ORIGINS="" turns app access off
+  const appOrigins = appOriginsFrom(env);
   // server-side analysis is opt-in: it keeps a CPU core busy while games are queued
   const analysis = env.ANALYSIS_QUEUE === '1' ? new AnalysisQueue(store, undefined, { ms: Number(env.ANALYSIS_MS) || 600 }) : null;
   if (analysis) console.log(`Server analysis: on (${analysis.ms} ms per position)`);
@@ -33,13 +35,19 @@ export async function startBackend(env: Record<string, string | undefined> = pro
   const daily = new DailyService(store, testClock ? { now: () => Date.now() + clockOffset } : {});
   daily.start();
   if (testClock) console.log('Daily chess: test clock on (POST /api/daily/test-clock)');
-  const { handler, identify } = createApi(store, { trustProxy, analysis, daily, advanceDailyClock: testClock ? ms => (clockOffset += ms) : null });
+  const { handler, identify } = createApi(store, {
+    trustProxy,
+    analysis,
+    daily,
+    advanceDailyClock: testClock ? ms => (clockOffset += ms) : null,
+    appOrigins,
+  });
   console.log(`Database: ${db.engine === 'postgres' ? 'PostgreSQL (DATABASE_URL)' : `SQLite (${env.SQLITE_PATH ?? 'data/chess.db'})`}`);
   return {
     store,
     api: handler,
     attach: (http, options = {}) => {
-      attachGameServer(http, {}, { trustProxy, store, identify, ...options });
+      attachGameServer(http, {}, { trustProxy, store, identify, appOrigins, ...options });
       http.on('close', () => {
         daily.stop();
         void db.close();

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, CATEGORIES, CATEGORY_LABEL, fetchExplorer, type Category, type ExplorerMove, type ExplorerSource, type MineFilter } from '../../account/api';
 import { gamesOf, gamesText, resultShares, totalOf } from '../../explorer/format';
 import { positionKey } from '../../explorer/key';
+import { useServer } from '../../hooks/useServer';
 
 const PREF_KEY = 'chess-app:explorer';
 
@@ -62,8 +63,11 @@ export function ExplorerPanel({ fen, standard, signedIn, onPlay }: Props) {
     }
   }, [prefs]);
 
+  // the Android app before a server is set: nothing to ask
+  const noServer = useServer() === null;
+
   useEffect(() => {
-    if (!prefs.open || !standard) return;
+    if (!prefs.open || !standard || noServer) return;
     let cancelled = false;
     setResult(null);
     // a short pause, so stepping quickly through a game doesn't ask for every position
@@ -77,7 +81,7 @@ export function ExplorerPanel({ fen, standard, signedIn, onPlay }: Props) {
       clearTimeout(t);
     };
     // the key identifies the position; fen is derived from it
-  }, [key, tab, filterKey, prefs.open, standard]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, tab, filterKey, prefs.open, standard, noServer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (patch: Partial<Prefs>) => setPrefs(p => ({ ...p, ...patch }));
   const setFilter = (patch: Partial<MineFilter>) => setPrefs(p => ({ ...p, filter: { ...p.filter, ...patch } }));
@@ -144,8 +148,9 @@ export function ExplorerPanel({ fen, standard, signedIn, onPlay }: Props) {
             </div>
           )}
 
-          {!result && <p className="muted small">Loading…</p>}
-          {result && 'error' in result && <p className="error small">{result.error}</p>}
+          {noServer && <p className="muted small">The explorer’s games are on the game server. Set its address under Online to use it.</p>}
+          {!noServer && !result && <p className="muted small">Loading…</p>}
+          {!noServer && result && 'error' in result && <p className="error small">{result.error}</p>}
           {result && 'moves' in result && moves.length === 0 && (
             <p className="muted small">
               {tab === 'masters' && !result.available

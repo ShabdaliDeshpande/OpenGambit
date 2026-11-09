@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- behind the app's pages: the same as the light theme's background (the bg colour in styles.css) -->
+    <color name="app_background">#F4F5F7</color>
+    <!-- the splash screen: the app's brand colour -->
+    <color name="splash_background">#161E2A</color>
+</resources>

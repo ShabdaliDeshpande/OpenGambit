@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { MoveRecord } from '../chess/game';
+import { revealInList } from './revealInList';
 
 interface Row {
   number: number;
@@ -42,7 +43,7 @@ export function MoveList({ moves, startFen, viewPly, resultText, onSelect }: Pro
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest' });
+    revealInList(activeRef.current);
   }, [viewPly, moves.length]);
 
   const cell = (e?: { san: string; ply: number }) =>

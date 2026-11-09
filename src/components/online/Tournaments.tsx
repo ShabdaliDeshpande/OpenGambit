@@ -3,6 +3,7 @@ import { findTimeControl, TIME_CONTROLS } from '../../chess/clock';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import { TOUR_OPTIONS, type CreateTour, type TourKind, type TourSummary } from '../../online/protocol';
 import { countdown } from '../../online/view';
+import { call } from '../../account/api';
 
 interface FinishedTour {
   id: string;
@@ -49,9 +50,8 @@ export function Tournaments({ client, state, signedIn, onSignIn, onOpen }: Props
   }, []);
 
   useEffect(() => {
-    fetch('/api/tournaments')
-      .then(r => (r.ok ? r.json() : { tournaments: [] }))
-      .then((d: { tournaments: FinishedTour[] }) => setFinished(d.tournaments))
+    call<{ tournaments: FinishedTour[] }>('/api/tournaments')
+      .then(d => setFinished(d.tournaments))
       .catch(() => undefined);
   }, []);
 

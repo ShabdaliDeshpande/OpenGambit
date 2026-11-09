@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchMe, logIn, logOut, signUp, type Me } from '../account/api';
 import { reconnectOnline } from '../online/client';
+import { isNativeApp, onServerChange, setSessionToken } from '../net/server';
 
 export interface AccountState {
   /** undefined while loading, null when signed out. */
@@ -23,6 +24,15 @@ export function useAccount(): AccountState {
   }, []);
 
   useEffect(refresh, [refresh]);
+  // the app moved to another server: whoever was signed in there is gone
+  useEffect(
+    () =>
+      onServerChange(() => {
+        setMe(undefined);
+        refresh();
+      }),
+    [refresh],
+  );
 
   const signIn = useCallback(async (username: string, password: string, create: boolean) => {
     const user = await (create ? signUp : logIn)(username, password);
@@ -31,12 +41,18 @@ export function useAccount(): AccountState {
   }, []);
 
   const signOut = useCallback(async () => {
-    await logOut();
+    try {
+      await logOut();
+    } catch (err) {
+      // the app forgets its token either way; the website still has its cookie
+      if (!isNativeApp) throw err;
+    }
     setMe(null);
     reconnectOnline();
   }, []);
 
   const forget = useCallback(() => {
+    setSessionToken(null, false);
     setMe(null);
     reconnectOnline();
   }, []);

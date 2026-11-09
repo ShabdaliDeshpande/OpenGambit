@@ -13,7 +13,7 @@ import {
   verifyPassword,
 } from './auth.ts';
 import { CATEGORIES, currentGlicko, displayRating, SESSION_TTL_MS, type Ratings, type StoredGame, type Store, type User } from './store.ts';
-import { clientIp, sameOrigin } from './transport.ts';
+import { bearerToken, clientIp, DEFAULT_APP_ORIGINS, fromApp, sameOrigin } from './transport.ts';
 import { buildDashboard } from './puzzleDashboard.ts';
 import { PuzzleCatalogue, solves, themeWeight } from './puzzles.ts';
 import type { UciMove } from '../src/puzzles/types.ts';
@@ -46,6 +46,8 @@ export interface ApiOptions {
   daily?: DailyService;
   /** Moves the daily clock forward: only for the smoke test (DAILY_TEST_CLOCK=1). */
   advanceDailyClock?: ((ms: number) => void) | null;
+  /** Origins of the Android app, allowed to call the API from another origin with a session token (DEFAULT_APP_ORIGINS). */
+  appOrigins?: readonly string[];
 }
 
 /** A review carries a score, best move and short line for every position. */
@@ -91,9 +93,14 @@ export function publicGame(g: StoredGame, withMoves = false) {
  * server. Sessions are random tokens in an HttpOnly cookie; the database only
  * keeps their hash. Every write requires JSON and a same-site Origin, which
  * together with SameSite=Lax cookies keeps other sites from acting for a user.
+ *
+ * The Android app is the exception: its pages come from https://localhost, so
+ * it may call from there (CORS), and it gets its session token in the sign-in
+ * reply and sends it back as `Authorization: Bearer`. Cookies are ignored on
+ * its requests, so a request from that origin can't act for anyone by itself.
  */
 export function createApi(store: Store, options: ApiOptions = {}) {
-  const { trustProxy = false, now = () => Date.now() } = options;
+  const { trustProxy = false, now = () => Date.now(), appOrigins = DEFAULT_APP_ORIGINS } = options;
   const maxFailures = options.maxLoginFailures ?? 10;
   const logins = new LoginLimiter(maxFailures, 15 * 60_000, now);
   // one address may be a whole school or office behind NAT, so it gets more room
@@ -112,8 +119,12 @@ export function createApi(store: Store, options: ApiOptions = {}) {
     return { ...displayRating(g), deviation: Math.round(g.deviation) };
   };
 
+  /** The request's session: the app's bearer token, or else (not from the app) the session cookie. */
+  const sessionOf = (req: IncomingMessage): string | undefined =>
+    bearerToken(req) ?? (fromApp(req, appOrigins) ? undefined : readCookie(req.headers.cookie, SESSION_COOKIE));
+
   const currentUser = async (req: IncomingMessage): Promise<User | undefined> => {
-    const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+    const token = sessionOf(req);
     return token ? store.userForSession(token) : undefined;
   };
 
@@ -131,6 +142,8 @@ export function createApi(store: Store, options: ApiOptions = {}) {
 
   const startSession = async (req: IncomingMessage, res: ServerResponse, user: User) => {
     const token = await store.createSession(user.id);
+    // the app keeps the token itself; the website gets it as an HttpOnly cookie
+    if (fromApp(req, appOrigins)) return send(res, 200, { user: await me(user), token });
     send(res, 200, { user: await me(user) }, { 'set-cookie': sessionCookie(token, isHttps(req, trustProxy), SESSION_TTL_MS) });
   };
 
@@ -142,7 +155,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
     const method = req.method ?? 'GET';
 
     if (method === 'POST') {
-      if (!req.headers.origin || !sameOrigin(req)) throw new HttpError(403, 'Cross-site request refused.');
+      if (!req.headers.origin || !(sameOrigin(req) || fromApp(req, appOrigins))) throw new HttpError(403, 'Cross-site request refused.');
       const ip = clientIp(req, trustProxy);
 
       if (path === '/api/signup') {
@@ -221,7 +234,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
           loginsByIp.fail(ip);
           throw new HttpError(403, 'Your current password is wrong.');
         }
-        const token = readCookie(req.headers.cookie, SESSION_COOKIE) ?? null;
+        const token = sessionOf(req) ?? null;
         if (path === '/api/account/password') {
           const problem = checkPassword(body.password, user.username);
           if (problem) throw new HttpError(400, problem);
@@ -299,7 +312,7 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       }
 
       if (path === '/api/logout') {
-        const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+        const token = sessionOf(req);
         if (token) await store.deleteSession(token);
         return send(res, 200, { user: null }, { 'set-cookie': clearedSessionCookie(isHttps(req, trustProxy)) });
       }
@@ -462,6 +475,20 @@ export function createApi(store: Store, options: ApiOptions = {}) {
       if (next) next();
       else send(res, 404, { error: 'Not found.' });
       return;
+    }
+    // the Android app calls from its own origin; no cookies are involved (see above)
+    if (fromApp(req, appOrigins)) {
+      res.setHeader('access-control-allow-origin', req.headers.origin!);
+      res.setHeader('vary', 'Origin');
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'access-control-allow-methods': 'GET, POST',
+          'access-control-allow-headers': 'authorization, content-type',
+          'access-control-max-age': '600',
+        });
+        res.end();
+        return;
+      }
     }
     route(req, res).catch((err: unknown) => {
       if (res.headersSent) return;

@@ -3,6 +3,7 @@ import { findTimeControl } from '../../chess/clock';
 import type { OnlineClient, OnlineState } from '../../online/client';
 import type { TourKind, TourSnapshot, TourStanding } from '../../online/protocol';
 import { tourTiming } from './Tournaments';
+import { call } from '../../account/api';
 
 interface StoredTour {
   id: string;
@@ -51,9 +52,8 @@ export function TournamentPage({ id, client, state, signedIn, onSignIn, onBack, 
   // no longer live: show the saved result
   useEffect(() => {
     if (!missing || received) return;
-    fetch(`/api/tournaments/${encodeURIComponent(id)}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then((d: { tournament: StoredTour } | null) => d && setStored(d.tournament))
+    call<{ tournament: StoredTour }>(`/api/tournaments/${encodeURIComponent(id)}`)
+      .then(d => setStored(d.tournament))
       .catch(() => undefined);
   }, [missing, received, id]);
 

@@ -1,3 +1,4 @@
+import { onServerChange, socketProtocols, socketUrl } from '../net/server';
 import {
   WS_PATH,
   type ClientMessage,
@@ -48,9 +49,10 @@ function loadToken(): string | undefined {
   }
 }
 
-function saveToken(token: string) {
+function saveToken(token: string | null) {
   try {
-    sessionStorage.setItem(TOKEN_KEY, token);
+    if (token === null) sessionStorage.removeItem(TOKEN_KEY);
+    else sessionStorage.setItem(TOKEN_KEY, token);
   } catch {
     // storage unavailable: the player is new on every visit
   }
@@ -80,11 +82,22 @@ export class OnlineClient {
   private wantLobby = false;
   private readonly watching = new Set<string>();
   private retryMs = 500;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private counter = 0;
 
   constructor() {
     this.open();
     window.addEventListener('pagehide', () => this.send({ t: 'bye' }));
+    // back from the background (a phone's screen turned on again): don't wait out the backoff
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.state.status === 'offline') this.reconnect();
+    });
+    // another server (in the app): a new guest there, and nothing from the old one carries over
+    onServerChange(() => {
+      saveToken(null);
+      this.set({ lobby: null, games: {}, error: null, started: null, tours: null, tourPages: {}, created: null });
+      this.reconnect();
+    });
   }
 
   subscribe = (listener: () => void) => {
@@ -144,14 +157,25 @@ export class OnlineClient {
     this.open();
   }
 
+  /** Whether there's a server to connect to (the app may not have one set yet). */
+  get hasServer(): boolean {
+    return socketUrl(WS_PATH) !== null;
+  }
+
   private set(patch: Partial<OnlineState>) {
     this.state = { ...this.state, ...patch };
     for (const l of this.listeners) l();
   }
 
   private open() {
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${WS_PATH}`;
-    const ws = new WebSocket(url);
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    const url = socketUrl(WS_PATH);
+    if (url === null) {
+      this.set({ status: 'offline', me: null });
+      return;
+    }
+    const ws = new WebSocket(url, socketProtocols());
     this.ws = ws;
     this.set({ status: 'connecting' });
     ws.onopen = () => {
@@ -163,7 +187,7 @@ export class OnlineClient {
       if (this.ws !== ws) return;
       this.ws = null;
       this.set({ status: 'offline', me: null });
-      setTimeout(() => this.open(), this.retryMs);
+      this.retryTimer = setTimeout(() => this.open(), this.retryMs);
       this.retryMs = Math.min(this.retryMs * 2, 5_000);
     };
   }

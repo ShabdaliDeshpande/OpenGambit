@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { isWhiteMove, moveNumber, NAG_SYMBOLS, type TreeNode } from '../../analysis/tree';
 import { KIND_LABEL, KIND_MARK, type Kind } from '../../analysis/review';
+import { revealInList } from '../revealInList';
 
 interface Props {
   root: TreeNode;
@@ -19,10 +20,8 @@ const samePath = (a: readonly string[], b: readonly string[]) => a.length === b.
  */
 export function TreeView({ root, path, onSelect, marks }: Props) {
   const activeRef = useRef<HTMLButtonElement>(null);
-  // block body on purpose: newer browsers return a Promise from scrollIntoView,
-  // and an effect must not return anything but a cleanup function
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest' });
+    revealInList(activeRef.current);
   }, [path]);
 
   const move = (node: TreeNode, nodePath: string[], forceNumber: boolean, main: boolean) => {

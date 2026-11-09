@@ -25,6 +25,8 @@ function backend(): Plugin {
 export default defineConfig({
   plugins: [react(), backend()],
   worker: { format: 'es' },
+  // the main chunk is a little over Vite's 500 kB hint; it loads from the phone in the Android app
+  build: { chunkSizeWarningLimit: 600 },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'server/**/*.test.ts'],

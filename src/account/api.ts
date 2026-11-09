@@ -1,7 +1,9 @@
-// Calls to the account API (/api). The session lives in an HttpOnly cookie,
-// so the page never sees it.
+// Calls to the account API (/api). On the website the session lives in an
+// HttpOnly cookie, so the page never sees it; the Android app keeps a session
+// token instead (see src/net/server.ts).
 
 import type { StoredReview } from '../analysis/reviewData';
+import { apiUrl, authHeaders, NO_SERVER, setSessionToken } from '../net/server';
 
 /** Rating categories: the live speeds and daily (correspondence) chess. */
 export type Category = 'bullet' | 'blitz' | 'rapid' | 'classical' | 'correspondence';
@@ -115,9 +117,15 @@ export class ApiError extends Error {
 }
 
 export async function call<T>(path: string, body?: unknown): Promise<T> {
+  const url = apiUrl(path);
+  if (url === null) throw new ApiError(0, NO_SERVER);
+  const headers: Record<string, string> = authHeaders();
   let res: Response;
   try {
-    res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    res = await fetch(
+      url,
+      body === undefined ? { headers } : { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) },
+    );
   } catch {
     throw new ApiError(0, 'Can’t reach the server.');
   }
@@ -126,11 +134,22 @@ export async function call<T>(path: string, body?: unknown): Promise<T> {
   return data;
 }
 
+/** Signing in from the app returns a session token (the website gets a cookie instead). */
+const session = async (path: string, username: string, password: string) => {
+  const data = await call<{ user: Me; token?: string }>(path, { username, password });
+  if (data.token) setSessionToken(data.token, false);
+  return data.user;
+};
+
 export const fetchMe = async () => (await call<{ user: Me | null }>('/api/me')).user;
-export const signUp = async (username: string, password: string) => (await call<{ user: Me }>('/api/signup', { username, password })).user;
-export const logIn = async (username: string, password: string) => (await call<{ user: Me }>('/api/login', { username, password })).user;
+export const signUp = (username: string, password: string) => session('/api/signup', username, password);
+export const logIn = (username: string, password: string) => session('/api/login', username, password);
 export const logOut = async () => {
-  await call('/api/logout', {});
+  try {
+    await call('/api/logout', {});
+  } finally {
+    setSessionToken(null, false);
+  }
 };
 export const fetchProfile = (name: string) => call<Profile>(`/api/users/${encodeURIComponent(name)}`);
 export const fetchGames = async (name: string, before: number) =>
