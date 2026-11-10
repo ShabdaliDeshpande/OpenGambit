@@ -33,6 +33,7 @@ import { useKeyboardNav } from '../hooks/useKeyboardNav';
 import { useGameEndSound, useLowTimeWarning } from '../hooks/useGameSounds';
 import { MAX_PREMOVES, takePremove, type Premove } from '../chess/premove';
 import { playSound } from '../sound/sounds';
+import { NavIcon } from './NavIcon';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 const turnOf = (fen: string): Color => (fen.split(' ')[1] === 'b' ? 'b' : 'w');
@@ -220,10 +221,10 @@ export function PlayView({ active, orientation, setOrientation, onAnalyse, reque
           <MoveList moves={game.moves} startFen={game.startFen} viewPly={game.viewPly} resultText={game.result?.result ?? null} onSelect={view} />
 
           <div className="nav row" aria-label="Move navigation">
-            <button type="button" onClick={() => view(0)} title="First (Home)" aria-label="First move">⏮</button>
-            <button type="button" onClick={() => view(game.viewPly - 1)} title="Previous (←)" aria-label="Previous move">◀</button>
-            <button type="button" onClick={() => view(game.viewPly + 1)} title="Next (→)" aria-label="Next move">▶</button>
-            <button type="button" onClick={() => view(game.moves.length)} title="Last (End)" aria-label="Last move">⏭</button>
+            <button type="button" onClick={() => view(0)} title="First (Home)" aria-label="First move"><NavIcon kind="first" /></button>
+            <button type="button" onClick={() => view(game.viewPly - 1)} title="Previous (←)" aria-label="Previous move"><NavIcon kind="prev" /></button>
+            <button type="button" onClick={() => view(game.viewPly + 1)} title="Next (→)" aria-label="Next move"><NavIcon kind="next" /></button>
+            <button type="button" onClick={() => view(game.moves.length)} title="Last (End)" aria-label="Last move"><NavIcon kind="last" /></button>
           </div>
 
           <p className={`status${game.result ? ' over' : ''}`} role="status">

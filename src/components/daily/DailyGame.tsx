@@ -9,6 +9,7 @@ import { useKeyboardNav } from '../../hooks/useKeyboardNav';
 import { Board } from '../Board';
 import { Flair } from '../Flair';
 import { MoveList } from '../MoveList';
+import { NavIcon } from '../NavIcon';
 
 const REFRESH_MS = 30_000;
 
@@ -201,10 +202,10 @@ export function DailyGame({ id, active, onBack, onOpenProfile, onOpenTour, onAna
           {player(side(top), top, 'top')}
           <MoveList moves={records} startFen={new Chess().fen()} viewPly={shownPly} resultText={game.result} onSelect={view} />
           <div className="nav row" aria-label="Move navigation">
-            <button type="button" onClick={() => view(0)} aria-label="First move">⏮</button>
-            <button type="button" onClick={() => view(shownPly - 1)} aria-label="Previous move">◀</button>
-            <button type="button" onClick={() => view(shownPly + 1)} aria-label="Next move">▶</button>
-            <button type="button" onClick={() => view(plies)} aria-label="Last move">⏭</button>
+            <button type="button" onClick={() => view(0)} aria-label="First move"><NavIcon kind="first" /></button>
+            <button type="button" onClick={() => view(shownPly - 1)} aria-label="Previous move"><NavIcon kind="prev" /></button>
+            <button type="button" onClick={() => view(shownPly + 1)} aria-label="Next move"><NavIcon kind="next" /></button>
+            <button type="button" onClick={() => view(plies)} aria-label="Last move"><NavIcon kind="last" /></button>
           </div>
           <p className={`status${playing ? '' : ' over'}`} role="status">
             {!playing

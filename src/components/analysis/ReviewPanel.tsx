@@ -5,6 +5,7 @@ import { KIND_LABEL, KIND_MARK, KINDS, type Kind } from '../../analysis/review';
 import type { RetryState } from '../../analysis/retry';
 import { EvalGraph } from './EvalGraph';
 import type { Division } from '../../analysis/divider';
+import { NavIcon } from '../NavIcon';
 
 export interface CurrentVerdict {
   move: ReviewedMove;
@@ -183,10 +184,10 @@ export function ReviewPanel(props: Props) {
               {SIDES.map(c => (
                 <td key={c} className="jump">
                   <button type="button" onClick={() => onJump(c, -1)} aria-label={`Previous mistake by ${names[c]}`} title="Previous inaccuracy or worse">
-                    ◀
+                    <NavIcon kind="prev" />
                   </button>
                   <button type="button" onClick={() => onJump(c, 1)} aria-label={`Next mistake by ${names[c]}`} title="Next inaccuracy or worse">
-                    ▶
+                    <NavIcon kind="next" />
                   </button>
                 </td>
               ))}

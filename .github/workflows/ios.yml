@@ -5,11 +5,16 @@ name: iOS app
 #  - "App" builds the Xcode project, starts the app in the iOS Simulator as a check, and makes an
 #    unsigned .ipa (download it from the run's Artifacts; it has to be signed before an iPhone
 #    will install it: see "iPhone and iPad app" in README.md).
-# It runs when the iOS project changes, or by hand: Actions → iOS app → Run workflow.
+# It runs when the app or the iOS project changes, or by hand: Actions → iOS app → Run workflow.
 on:
   workflow_dispatch:
   push:
     paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
       - 'ios/**'
       - 'capacitor.config.ts'
       - 'scripts/smoke-iphone.ts'
@@ -25,7 +30,7 @@ concurrency:
 jobs:
   webkit:
     name: WebKit (the iPhone's browser engine)
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -36,7 +41,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Install Playwright's WebKit
-        run: npm i --no-save playwright && npx playwright install --with-deps webkit
+        run: npm i --no-save playwright && npx playwright install webkit
       - name: Start the server
         run: |
           node server/index.ts > server.log 2>&1 &

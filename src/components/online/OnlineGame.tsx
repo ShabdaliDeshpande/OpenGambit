@@ -14,6 +14,7 @@ import { clockMs, fenAfter, onlinePgn, replay, withPending } from '../../online/
 import { diffText, ratingText } from '../../account/api';
 import type { AnalysedGame } from '../analysis/AnalysisView';
 import { Flair } from '../Flair';
+import { NavIcon } from '../NavIcon';
 
 const colorName = (c: Color) => (c === 'w' ? 'White' : 'Black');
 const seconds = (ms: number) => Math.ceil(ms / 1000);
@@ -197,10 +198,10 @@ export function OnlineGame({ gameId, active, client, state, onBack, onAnalyse, o
           <MoveList moves={records} startFen={fenAfter(records, 0)} viewPly={ply} resultText={snap.result?.result ?? null} onSelect={view} />
 
           <div className="nav row" aria-label="Move navigation">
-            <button type="button" onClick={() => view(0)} title="First (Home)" aria-label="First move">⏮</button>
-            <button type="button" onClick={() => view(ply - 1)} title="Previous (←)" aria-label="Previous move">◀</button>
-            <button type="button" onClick={() => view(ply + 1)} title="Next (→)" aria-label="Next move">▶</button>
-            <button type="button" onClick={() => view(records.length)} title="Last (End)" aria-label="Last move">⏭</button>
+            <button type="button" onClick={() => view(0)} title="First (Home)" aria-label="First move"><NavIcon kind="first" /></button>
+            <button type="button" onClick={() => view(ply - 1)} title="Previous (←)" aria-label="Previous move"><NavIcon kind="prev" /></button>
+            <button type="button" onClick={() => view(ply + 1)} title="Next (→)" aria-label="Next move"><NavIcon kind="next" /></button>
+            <button type="button" onClick={() => view(records.length)} title="Last (End)" aria-label="Last move"><NavIcon kind="last" /></button>
             <button type="button" onClick={() => setFlipped(f => !f)} title="Flip board (f)" aria-label="Flip board">⇅</button>
           </div>
 

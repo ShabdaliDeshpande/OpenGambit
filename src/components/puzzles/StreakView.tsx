@@ -8,6 +8,7 @@ import { useRunBests } from '../../hooks/useRunBests';
 import { newStreak, runSequence, type StreakState } from '../../puzzles/runs';
 import type { Puzzle } from '../../puzzles/types';
 import { playSound } from '../../sound/sounds';
+import { NavIcon } from '../NavIcon';
 
 interface Props {
   puzzles: readonly Puzzle[];
@@ -105,7 +106,7 @@ export function StreakView({ puzzles, me, onSignIn }: Props) {
           {current && <p className="muted small">Puzzle {current} · rated {session.puzzle.rating}</p>}
           {run && !run.over && (
             <button type="button" onClick={skip} disabled={!run.skipAvailable || session.phase !== 'playing'} title="Play the right move for you, once per run">
-              ⏭ Skip this move{run.skipAvailable ? ' (once)' : ' (used)'}
+              <NavIcon kind="last" /> Skip this move{run.skipAvailable ? ' (once)' : ' (used)'}
             </button>
           )}
           {(!run || run.over) && (

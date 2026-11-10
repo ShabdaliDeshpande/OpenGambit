@@ -4,6 +4,7 @@ import type { OnlineClient, OnlineState } from '../../online/client';
 import type { TourKind, TourSnapshot, TourStanding } from '../../online/protocol';
 import { tourTiming } from './Tournaments';
 import { call } from '../../account/api';
+import { NavIcon } from '../NavIcon';
 
 interface StoredTour {
   id: string;
@@ -98,7 +99,7 @@ export function TournamentPage({ id, client, state, signedIn, onSignIn, onBack, 
         <div className="row">
           {t.you?.playing && (
             <button type="button" className="primary" onClick={() => onOpenGame(t.you!.playing!)}>
-              ▶ Go to your game
+              <NavIcon kind="next" /> Go to your game
             </button>
           )}
           {!signedIn ? (

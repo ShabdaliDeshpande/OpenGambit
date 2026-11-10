@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { checkVideos, embedUrl, filterVideos, LEVELS, youtubeId, type Video, type VideoLevel } from '../../learn/videos';
+import { NavIcon } from '../NavIcon';
 
 /** The site's video library, read from /videos.json (empty until whoever runs the site fills it in). */
 export function VideoLibrary() {
@@ -90,7 +91,7 @@ export function VideoLibrary() {
                 </div>
               ) : yt ? (
                 <button type="button" onClick={() => setPlaying(v.url)}>
-                  ▶ Play here
+                  <NavIcon kind="next" /> Play here
                 </button>
               ) : (
                 <a href={v.url} target="_blank" rel="noopener noreferrer">

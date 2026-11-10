@@ -30,6 +30,7 @@ import { emptyTree, isMainline, movesAlong, nodeAt } from '../../analysis/tree';
 import { checkFen } from '../../chess/game';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import { useKeyboardNav } from '../../hooks/useKeyboardNav';
+import { NavIcon } from '../NavIcon';
 
 const ENGINE_KEY = 'chess-app:analysis-engine';
 
@@ -473,10 +474,10 @@ export function AnalysisView({ active, orientation, onFlip, request, signedIn = 
         <section className="panel">
           <TreeView root={root} path={state.path} onSelect={path => !retry && dispatch({ type: 'goto', path })} marks={marks} />
           <div className="nav row" aria-label="Move navigation">
-            <button type="button" onClick={() => dispatch({ type: 'first' })} disabled={!!retry} title="Start (Home)" aria-label="Start position">⏮</button>
-            <button type="button" onClick={() => dispatch({ type: 'prev' })} disabled={!!retry} title="Back (←)" aria-label="Previous move">◀</button>
-            <button type="button" onClick={() => dispatch({ type: 'next' })} disabled={!!retry} title="Forward (→)" aria-label="Next move">▶</button>
-            <button type="button" onClick={() => dispatch({ type: 'last' })} disabled={!!retry} title="End of line (End)" aria-label="End of line">⏭</button>
+            <button type="button" onClick={() => dispatch({ type: 'first' })} disabled={!!retry} title="Start (Home)" aria-label="Start position"><NavIcon kind="first" /></button>
+            <button type="button" onClick={() => dispatch({ type: 'prev' })} disabled={!!retry} title="Back (←)" aria-label="Previous move"><NavIcon kind="prev" /></button>
+            <button type="button" onClick={() => dispatch({ type: 'next' })} disabled={!!retry} title="Forward (→)" aria-label="Next move"><NavIcon kind="next" /></button>
+            <button type="button" onClick={() => dispatch({ type: 'last' })} disabled={!!retry} title="End of line (End)" aria-label="End of line"><NavIcon kind="last" /></button>
           </div>
           <div className="row tree-actions">
             <button

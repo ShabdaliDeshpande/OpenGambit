@@ -582,6 +582,14 @@ h2 {
   color: var(--text);
 }
 
+/* move arrows (NavIcon): sized and coloured like the text around them */
+.nav-icon {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  vertical-align: -0.14em;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

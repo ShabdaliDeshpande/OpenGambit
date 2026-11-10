@@ -24,6 +24,7 @@ import { repertoireMove } from '../../bots/repertoire';
 import { chatLine, endEvent, engineScore, moveEvent, wasBlunder } from '../../bots/chat';
 import { activeAssists, ASSIST_KEYS, ASSIST_LABEL, needsAnalysis, resultValue, takeBackTo, type Assists, type BotMode } from '../../bots/botGame';
 import { BotAvatar } from './BotAvatar';
+import { NavIcon } from '../NavIcon';
 
 /** An opening move (the bot's own line or the book) still waits a moment. */
 const OPENING_REPLY_MS = 500;
@@ -280,10 +281,10 @@ export function BotGame({ bot, player, mode, assists, moves: initial, active, on
         <section className="panel game">
           <MoveList moves={game.moves} startFen={game.startFen} viewPly={game.viewPly} resultText={game.result?.result ?? null} onSelect={view} />
           <div className="nav row" aria-label="Move navigation">
-            <button type="button" onClick={() => view(0)} title="First (Home)" aria-label="First move">⏮</button>
-            <button type="button" onClick={() => view(game.viewPly - 1)} title="Previous (←)" aria-label="Previous move">◀</button>
-            <button type="button" onClick={() => view(game.viewPly + 1)} title="Next (→)" aria-label="Next move">▶</button>
-            <button type="button" onClick={() => view(game.moves.length)} title="Last (End)" aria-label="Last move">⏭</button>
+            <button type="button" onClick={() => view(0)} title="First (Home)" aria-label="First move"><NavIcon kind="first" /></button>
+            <button type="button" onClick={() => view(game.viewPly - 1)} title="Previous (←)" aria-label="Previous move"><NavIcon kind="prev" /></button>
+            <button type="button" onClick={() => view(game.viewPly + 1)} title="Next (→)" aria-label="Next move"><NavIcon kind="next" /></button>
+            <button type="button" onClick={() => view(game.moves.length)} title="Last (End)" aria-label="Last move"><NavIcon kind="last" /></button>
           </div>
           <p className={`status${game.result ? ' over' : ''}`} role="status">
             {status}
