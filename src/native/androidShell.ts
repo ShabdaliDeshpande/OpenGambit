@@ -1,5 +1,6 @@
-// What the Android app does differently from the website: the system back
-// button, and status / navigation bar icons that match the app's theme.
+// What the phone apps do differently from the website: Android's system back
+// button, and status / navigation bar icons that match the app's theme
+// (Android and iOS).
 
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { App } from '@capacitor/app';

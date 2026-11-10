@@ -448,7 +448,7 @@ The app is one Node process that serves the built files, the account API and the
 Things to know about hosting it:
 - Running games live in memory. A restart or redeploy ends them. Accounts, ratings and finished games are kept in the database.
 - Render's free plan stops the service after about 15 minutes without visitors, and the next visit takes a while to start it again.
-- The server accepts WebSocket connections and changes only from pages on its own host, and from the Android app (below). It limits sockets per address, messages per connection, logins and sign-ups. It has no moderation.
+- The server accepts WebSocket connections and changes only from pages on its own host, and from the Android and iOS apps (below). It limits sockets per address, messages per connection, logins and sign-ups. It has no moderation.
 
 ## Android app
 
@@ -489,6 +489,20 @@ keytool -genkeypair -keystore android/opengambit-release.jks -alias opengambit -
 ```
 
 The version shown on the phone is `version` from `package.json`; raise `versionCode` in `android/app/build.gradle` for every APK you hand out as an update.
+
+## iPhone and iPad app
+
+The same Capacitor project has an iOS app in `ios/` (iOS 16 or newer; the pages run from `capacitor://localhost`). It behaves like the Android app: everything that needs no server works offline, the **Online** tab asks for the server's `https://` address, and it signs in with a session token.
+
+Apple only lets an iPhone app be built on a Mac, and only lets an iPhone install an app that is signed with an Apple ID:
+
+- **With a Mac:** `npm run ios:sync`, open `ios/App/App.xcodeproj` in Xcode, choose your Apple ID under *Signing & Capabilities*, plug in the iPhone and press Run. A free Apple ID works; the app then has to be re-installed every 7 days. A paid Apple Developer account ($99 a year) lifts that and allows TestFlight and the App Store.
+- **Without a Mac:** the [iOS app workflow](.github/workflows/ios.yml) builds on GitHub's Macs. It starts the app in the iOS Simulator as a check and uploads `OpenGambit-unsigned.ipa` under the run's **Artifacts** (Actions → iOS app). The `.ipa` is unsigned, so it still has to be signed before an iPhone accepts it: with a developer account, or with a sideloading tool that signs it with your Apple ID (7 days at a time).
+- **Without any of that:** open your deployed site in Safari on the iPhone and choose **Share → Add to Home Screen**. That installs the website as an app (full screen, own icon, offline play against the computer) with no Apple account at all.
+
+The workflow also runs `scripts/smoke-iphone.ts`: the app in WebKit, the browser engine iPhones use, at iPhone size.
+
+The version and build number are `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj`; keep them in step with `package.json`.
 
 ## Project layout
 
@@ -580,6 +594,7 @@ server/         the server (Node, run directly from TypeScript)
 scripts/smoke-accounts.ts  end-to-end check of accounts and rated play against a running server
 public/         manifest.webmanifest, icons/, sw.js (service worker for install and offline play)
 android/        the Android project (Capacitor); capacitor.config.ts configures it. npm run android:apk builds the APK
+ios/            the iOS project (Capacitor, Swift Package Manager); built by .github/workflows/ios.yml or in Xcode after npm run ios:sync
 scripts/smoke-tournament.ts  end-to-end check: four accounts play a 3-round Swiss on a running server
 scripts/smoke-puzzles.ts  end-to-end check of puzzle ratings, the dashboard and the daily puzzle
 scripts/smoke-account-settings.ts  end-to-end check of password change, leaderboard and account deletion
@@ -592,6 +607,7 @@ scripts/smoke-insights.ts  end-to-end check of insights: games with clocks, a re
 scripts/smoke-learn.ts  end-to-end check of learning progress: saving, keeping the better result, accounts kept apart
 scripts/smoke-bots.ts  end-to-end check of bot results kept with the account (a win beats a draw)
 scripts/smoke-daily.ts  end-to-end check of daily chess: a seek, a move each, a conditional reply, a timeout (server started with DAILY_TEST_CLOCK=1)
+scripts/smoke-iphone.ts  end-to-end check in WebKit (the iPhone's browser engine) at iPhone size: board, engine, bots, puzzles, lobby, layout
 scripts/bot-ratings.ts  plays the bots against each other and the engine levels and fits their ratings (npm run bots:rate)
 ```
 
@@ -615,7 +631,8 @@ This project has no GPL or AGPL dependencies.
 | pg's dependencies (server only) | pg-int8 1.0.1, split2 4.2.0 | ISC |
 | @capacitor/core (the Android app's bridge) | 8.6.0 | MIT |
 | @capacitor/android (Android app only) | 8.6.0 | MIT |
-| @capacitor/app (Android app only: back button) | 8.1.2 | MIT |
+| @capacitor/ios (iOS app only) | 8.6.0 | MIT |
+| @capacitor/app (phone apps only: back button) | 8.1.2 | MIT |
 | AndroidX libraries in the APK (appcompat, core, splashscreen, webkit, …) | see android/variables.gradle | Apache-2.0 |
 
 SQLite comes from Node's built-in `node:sqlite` module, so no extra package is needed for it.

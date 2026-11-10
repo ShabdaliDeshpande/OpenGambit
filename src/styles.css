@@ -530,7 +530,16 @@ h2 {
 
 .segmented button {
   flex: 1;
+  /* four choices still fit across a 320px phone */
+  min-width: 0;
   border-radius: 0;
+}
+
+@media (max-width: 360px) {
+  .segmented button {
+    padding: 6px 2px;
+    font-size: 12px;
+  }
 }
 
 .segmented button:first-child {
@@ -1196,6 +1205,23 @@ button.link-button {
   color: var(--muted);
 }
 
+/* the narrowest phones: tighter cells, and a long name may wrap */
+@media (max-width: 380px) {
+  .seek-table {
+    font-size: 13px;
+  }
+  .seek-table th,
+  .seek-table td {
+    padding: 6px 2px;
+  }
+  .seek-table td:first-child {
+    overflow-wrap: anywhere;
+  }
+  .seek-table button {
+    padding: 5px 8px;
+  }
+}
+
 .live-games {
   list-style: none;
   margin: 0;
@@ -1392,6 +1418,19 @@ p button.link-button {
   display: flex;
   gap: 6px;
   margin-bottom: 12px;
+}
+
+/* phones: the four sections share the row instead of running off its end */
+@media (max-width: 420px) {
+  .subnav {
+    gap: 4px;
+  }
+  .subnav button {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 5px;
+    font-size: 13px;
+  }
 }
 
 .subnav button.on {
@@ -3143,10 +3182,19 @@ button.daily-button {
   margin-top: 16px;
 }
 
-/* ---------- the Android app ---------- */
+/* ---------- phones: the Android and iOS apps, and iPhone browsers ---------- */
 
-/* the app draws under the status and navigation bars (edge to edge): keep content clear of them.
-   Capacitor sets --safe-area-inset-*; env() covers browsers on phones with a notch */
+/* iPhones zoom the page when a field with text under 16px gets the focus, and don't zoom back */
+@supports (-webkit-touch-callout: none) {
+  input:not([type='radio']):not([type='checkbox']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* the apps draw under the status and navigation bars (edge to edge): keep content clear of them.
+   Capacitor sets --safe-area-inset-* on Android; env() covers iOS and browsers on phones with a notch */
 :root {
   --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
@@ -3187,6 +3235,8 @@ html.native-app {
   -webkit-tap-highlight-color: transparent;
   /* no rubber-band glow at the ends of the page */
   overscroll-behavior: none;
+  /* a quick second tap is a tap, not a zoom */
+  touch-action: manipulation;
 }
 
 /* buttons and the board don't select text or open the long-press menu */
@@ -3241,6 +3291,7 @@ html.native-app .board {
     gap: 14px;
   }
   .board-wrap {
+    width: min(100%, calc(100vh - 62px - var(--safe-top) - var(--safe-bottom)));
     width: min(100%, calc(100dvh - 62px - var(--safe-top) - var(--safe-bottom)));
   }
 }

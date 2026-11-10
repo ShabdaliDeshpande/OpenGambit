@@ -1,15 +1,15 @@
 // Where the account API and the game server live.
 //
 // On the website they're on the same address as the page, so every path is
-// used as it is and the session is an HttpOnly cookie. The Android app runs
-// its pages from https://localhost inside the APK, so it talks to a server
-// whose address is set at build time (VITE_SERVER_URL) or typed in by the
-// player, and it signs in with a session token sent in a header instead of a
-// cookie.
+// used as it is and the session is an HttpOnly cookie. The phone apps run
+// their pages from inside the app (https://localhost on Android,
+// capacitor://localhost on iOS), so they talk to a server whose address is
+// set at build time (VITE_SERVER_URL) or typed in by the player, and they
+// sign in with a session token sent in a header instead of a cookie.
 
 import { Capacitor } from '@capacitor/core';
 
-/** True inside the Android app. */
+/** True inside the Android or iOS app. */
 export const isNativeApp: boolean = Capacitor.isNativePlatform();
 
 const SERVER_KEY = 'opengambit:server';

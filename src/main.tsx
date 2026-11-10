@@ -4,8 +4,12 @@ import App from './App';
 import { isNativeApp } from './net/server';
 import './styles.css';
 
-// the Android app has its own styles (safe areas, no tap flashes) and its files are already on the phone
-if (isNativeApp) document.documentElement.classList.add('native-app');
+// the phone apps have their own styles (safe areas, no tap flashes), don't zoom like a web page,
+// and their files are already on the phone
+if (isNativeApp) {
+  document.documentElement.classList.add('native-app');
+  document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+}
 
 // installable app and offline play, in production builds only (it would cache stale files during development)
 if (import.meta.env.PROD && !isNativeApp && 'serviceWorker' in navigator) {

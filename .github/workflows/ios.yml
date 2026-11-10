@@ -1,0 +1,116 @@
+name: iOS app
+
+# An iPhone app can only be built on a Mac. This builds it on GitHub's:
+#  - "WebKit" runs the app in the browser engine iPhones use (scripts/smoke-iphone.ts);
+#  - "App" builds the Xcode project, starts the app in the iOS Simulator as a check, and makes an
+#    unsigned .ipa (download it from the run's Artifacts; it has to be signed before an iPhone
+#    will install it: see "iPhone and iPad app" in README.md).
+# It runs when the iOS project changes, or by hand: Actions → iOS app → Run workflow.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'scripts/smoke-iphone.ts'
+      - '.github/workflows/ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webkit:
+    name: WebKit (the iPhone's browser engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install Playwright's WebKit
+        run: npm i --no-save playwright && npx playwright install --with-deps webkit
+      - name: Start the server
+        run: |
+          node server/index.ts > server.log 2>&1 &
+          for i in $(seq 1 100); do curl -sf http://localhost:8787/healthz > /dev/null && break; sleep 0.2; done
+      - name: Run the app in WebKit at iPhone size
+        run: node scripts/smoke-iphone.ts http://localhost:8787 webkit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkit-screenshot
+          path: smoke-iphone.png
+          if-no-files-found: ignore
+
+  app:
+    name: App (simulator check and unsigned .ipa)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build the web app and copy it into the iOS project
+        run: npm run ios:sync
+
+      - name: Pick an iPhone simulator
+        run: |
+          xcodebuild -version
+          UDID=$(xcrun simctl list devices available --json | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .key as $runtime | .value[] | select(.name | startswith("iPhone")) | {runtime: $runtime, udid, name}] | sort_by(.runtime) | last | .udid')
+          test -n "$UDID" && test "$UDID" != null
+          xcrun simctl list devices available | grep "$UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO -quiet build
+
+      - name: Start the app in the simulator
+        run: |
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" build/ios/Build/Products/Debug-iphonesimulator/App.app
+          # the app prints Capacitor's log (page loads, and the page's console) on its console
+          xcrun simctl launch --console-pty "$UDID" com.opengambit.app > ios-simulator.log 2>&1 &
+          for i in $(seq 1 90); do grep -q "WebView loaded" ios-simulator.log && break; sleep 2; done
+          sleep 10
+          xcrun simctl io "$UDID" screenshot ios-simulator.png
+          cat ios-simulator.log
+          grep -q "WebView loaded" ios-simulator.log
+          # nothing went wrong while the page started
+          ! grep -E "\[error\]|JS Eval error|failed to load|FATAL ERROR" ios-simulator.log
+
+      - name: Build the unsigned .ipa
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/ios \
+            -archivePath build/OpenGambit.xcarchive CODE_SIGNING_ALLOWED=NO -quiet archive
+          mkdir -p build/Payload
+          cp -R build/OpenGambit.xcarchive/Products/Applications/App.app build/Payload/
+          (cd build && zip -qry ../OpenGambit-unsigned.ipa Payload)
+          ls -l OpenGambit-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OpenGambit-iOS
+          path: |
+            OpenGambit-unsigned.ipa
+            ios-simulator.png
+            ios-simulator.log
+          if-no-files-found: warn

@@ -38,7 +38,8 @@ export function onSoundSetting(listener: () => void): () => void {
 function audio(): AudioContext | null {
   if (typeof window === 'undefined' || !('AudioContext' in window)) return null;
   ctx ??= new AudioContext();
-  if (ctx.state === 'suspended') void ctx.resume();
+  // "suspended" until the first tap; iOS also leaves it "interrupted" after a call or time in the background
+  if (ctx.state !== 'running' && ctx.state !== 'closed') void ctx.resume().catch(() => undefined);
   return ctx;
 }
 

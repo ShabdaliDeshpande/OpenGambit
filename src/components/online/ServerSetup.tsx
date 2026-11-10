@@ -3,13 +3,17 @@ import { builtInServer, normaliseServer, serverBase, setServer } from '../../net
 
 /** Asks a server whether it's an OpenGambit server, allowing for one that's waking up from sleep. */
 async function probe(origin: string): Promise<boolean> {
+  const giveUp = new AbortController();
+  const timer = setTimeout(() => giveUp.abort(), 60_000);
   try {
-    const res = await fetch(`${origin}/api/me`, { signal: AbortSignal.timeout(60_000) });
+    const res = await fetch(`${origin}/api/me`, { signal: giveUp.signal });
     if (!res.ok) return false;
     const data = (await res.json()) as unknown;
     return !!data && typeof data === 'object' && 'user' in data;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -20,7 +24,7 @@ interface Props {
 }
 
 /**
- * The Android app's server address. Online play, accounts, tournaments and
+ * The phone app's server address. Online play, accounts, tournaments and
  * daily chess all live on an OpenGambit server (`npm start`, or the Docker
  * image); everything else in the app works without one.
  */
@@ -95,7 +99,7 @@ export function ServerSetup({ onDone, onCancel }: Props) {
   );
 }
 
-/** "Server: host · Change" in the app, so the address can be changed later. */
+/** "Server: host · Change" in the phone app, so the address can be changed later. */
 export function ServerLine({ onChange }: { onChange: () => void }) {
   const base = serverBase();
   if (!base) return null;
